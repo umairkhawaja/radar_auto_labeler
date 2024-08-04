@@ -15,6 +15,7 @@ from nuscenes.utils.geometry_utils import transform_matrix
 
 from utils.ransac_solver import RANSACSolver
 from utils.transforms import *
+RadarPointCloud.default_filters()
 
 class NuScenesDataloader:
     def __init__(self, nusc, data_dir: Path, sequence: int,  nusc_version: str = "v1.0-mini", *_, **__):
