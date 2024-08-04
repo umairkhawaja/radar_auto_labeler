@@ -8,7 +8,7 @@ from nuscenes.utils.data_classes import RadarPointCloud, LidarPointCloud
 from PIL import Image
 from pyquaternion import Quaternion
 from nuscenes.utils.geometry_utils import view_points, transform_matrix
-
+from matplotlib.colors import LinearSegmentedColormap
 
 
 def plot_maps(scene_maps, poses, size=0.5, zoom_level=3):
@@ -98,30 +98,11 @@ def plot_voxel_map(voxel_hash_map, voxel_size):
     plot_voxel_hash_map_open3d(normalized_scores, voxel_hash_map, voxel_size)
 
 
-
-def get_sps_labels(map, scan_points):
-    labeled_map_points = map[:, :3]
-    labeled_map_labels = map[:, -1]
-
-    sps_labels = []
-    for point in scan_points[:, :3]:
-        distances = np.linalg.norm(labeled_map_points - point, axis=1)
-        closest_point_idx = np.argmin(distances)
-        sps_labels.append(labeled_map_labels[closest_point_idx])
-    sps_labels = np.array(sps_labels)
-    return sps_labels
-
-
 def map_pointcloud_to_image(nusc,
                             sps_map,
                             pointsensor_token: str,
                             camera_token: str,
-                            min_dist: float = 1.0,
-                            render_intensity: bool = False,
-                            show_lidarseg: bool = False,
-                            filter_lidarseg_labels: List = None,
-                            lidarseg_preds_bin_path: str = None,
-                            show_panoptic: bool = False):
+                            min_dist: float = 1.0):
     """
     Given a point sensor (lidar/radar) token and camera sample_data token, load pointcloud and map it to the image
     plane.
@@ -144,21 +125,7 @@ def map_pointcloud_to_image(nusc,
     pointsensor = nusc.get('sample_data', pointsensor_token)
 
     pcl_path = osp.join(nusc.dataroot, pointsensor['filename'])
-    if pointsensor['sensor_modality'] == 'lidar':
-        if show_lidarseg or show_panoptic:
-            gt_from = 'lidarseg' if show_lidarseg else 'panoptic'
-            assert hasattr(nusc, gt_from), f'Error: nuScenes-{gt_from} not installed!'
-
-            # Ensure that lidar pointcloud is from a keyframe.
-            assert pointsensor['is_key_frame'], \
-                'Error: Only pointclouds which are keyframes have lidar segmentation labels. Rendering aborted.'
-
-            assert not render_intensity, 'Error: Invalid options selected. You can only select either ' \
-                                            'render_intensity or show_lidarseg, not both.'
-
-        pc = LidarPointCloud.from_file(pcl_path)
-    else:
-        pc = RadarPointCloud.from_file(pcl_path)
+    pc = RadarPointCloud.from_file(pcl_path)
     im = Image.open(osp.join(nusc.dataroot, cam['filename']))
     
 
@@ -177,14 +144,6 @@ def map_pointcloud_to_image(nusc,
     global_points = pc.points.T
     sps_score = get_sps_labels(sps_map, global_points)
 
-    # plt.figure(figsize=(10,5))
-    # plt.scatter(sps_map[:, 0], sps_map[:, 1], label='sps_map', s=size)
-    # plt.scatter(global_points[:, 0], global_points[:, 1], label='global_frame', s=size)
-    # plt.xlabel('X')
-    # plt.ylabel('Y')
-    # plt.legend()
-    # plt.show()
-
     # Third step: transform from global into the ego vehicle frame for the timestamp of the image.
     poserecord = nusc.get('ego_pose', cam['ego_pose_token'])
     pc.translate(-np.array(poserecord['translation']))
@@ -199,13 +158,7 @@ def map_pointcloud_to_image(nusc,
     # Fifth step: actually take a "picture" of the point cloud.
     # Grab the depths (camera frame z axis points away from the camera).
     depths = pc.points[2, :]
-
-    if render_intensity:
-        assert pointsensor['sensor_modality'] == 'lidar', 'Error: Can only render intensity for lidar, ' \
-                                                            'not %s!' % pointsensor['sensor_modality']
-    else:
-        # Retrieve the color from the depth.
-        coloring = sps_score
+    coloring = sps_score
 
     # Take the actual picture (matrix multiplication with camera-matrix + renormalization).
     points = view_points(pc.points[:3, :], np.array(cs_record['camera_intrinsic']), normalize=True)
@@ -231,14 +184,8 @@ def render_pointcloud_in_image(nusc,
                                 pointsensor_channel: str = 'LIDAR_TOP',
                                 camera_channel: str = 'CAM_FRONT',
                                 out_path: str = None,
-                                render_intensity: bool = False,
-                                show_lidarseg: bool = False,
-                                filter_lidarseg_labels: List = None,
                                 ax = None,
-                                show_lidarseg_legend: bool = False,
-                                verbose: bool = True,
-                                lidarseg_preds_bin_path: str = None,
-                                show_panoptic: bool = False):
+                                verbose: bool = True):
     """
     Scatter-plots a pointcloud on top of image.
     :param sample_token: Sample token.
@@ -258,8 +205,8 @@ def render_pointcloud_in_image(nusc,
         to False, the colors of the lidar data represent the distance from the center of the ego vehicle.
         If show_lidarseg is True, show_panoptic will be set to False.
     """
-    if show_lidarseg:
-        show_panoptic = False
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    
     sample_record = nusc.get('sample', sample_token)
 
 
@@ -267,48 +214,46 @@ def render_pointcloud_in_image(nusc,
     pointsensor_token = nusc.get('sample_data', sample_record['data'][pointsensor_channel])['token'] # sample_record['data'][pointsensor_channel]
     camera_token = nusc.get('sample_data', sample_record['data'][camera_channel])['token'] # sample_record['data'][camera_channel]
 
-    points, coloring, im = map_pointcloud_to_image(nusc, sps_map, pointsensor_token, camera_token,
-                                                        render_intensity=render_intensity,
-                                                        show_lidarseg=show_lidarseg,
-                                                        filter_lidarseg_labels=filter_lidarseg_labels,
-                                                        lidarseg_preds_bin_path=lidarseg_preds_bin_path,
-                                                        show_panoptic=show_panoptic)
+    points, coloring, im = map_pointcloud_to_image(nusc, sps_map, pointsensor_token, camera_token)
+
+    ## Enforce colouring
+        # Define the custom colormap
+    cdict = {
+        'red':   ((0.0, 1.0, 1.0),
+                  (0.5, 1.0, 1.0),
+                  (1.0, 0.0, 0.0)),
+
+        'green': ((0.0, 0.0, 0.0),
+                  (0.5, 1.0, 1.0),
+                  (1.0, 1.0, 1.0)),
+
+        'blue':  ((0.0, 0.0, 0.0),
+                  (0.5, 0.0, 0.0),
+                  (1.0, 0.0, 0.0))
+    }
+    gyr_cmap = LinearSegmentedColormap('GYR', cdict)
+
+    # Normalize the coloring array to [0, 1]
+    norm = plt.Normalize(vmin=0, vmax=1)
+    coloring_normalized = norm(coloring)
+
+    # Apply the colormap to the normalized coloring array
+    coloring_rgb = gyr_cmap(coloring_normalized)
 
     # Init axes.
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(9, 16))
-        if lidarseg_preds_bin_path:
-            fig.canvas.set_window_title(sample_token + '(predictions)')
-        else:
-            fig.canvas.set_window_title(sample_token)
+        fig.canvas.set_window_title(sample_token)
     else:  # Set title on if rendering as part of render_sample.
         ax.set_title(camera_channel)
     ax.imshow(im)
     scatter = ax.scatter(points[0, :], points[1, :], c=coloring, s=dot_size, cmap='RdYlGn')
-    from mpl_toolkits.axes_grid1 import make_axes_locatable
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
 
     ax.axis('off')
-    # fig.colorbar(im, label='Stability', orientation='horizontal')
     cbar = plt.colorbar(scatter, cax=cax)
     cbar.set_label("Stability (Max: 1)")
-
-    # Produce a legend with the unique colors from the scatter.
-    if pointsensor_channel == 'LIDAR_TOP' and (show_lidarseg or show_panoptic) and show_lidarseg_legend:
-        # If user does not specify a filter, then set the filter to contain the classes present in the pointcloud
-        # after it has been projected onto the image; this will allow displaying the legend only for classes which
-        # are present in the image (instead of all the classes).
-        if filter_lidarseg_labels is None:
-            if show_lidarseg:
-                # Since the labels are stored as class indices, we get the RGB colors from the
-                # colormap in an array where the position of the RGB color corresponds to the index
-                # of the class it represents.
-                color_legend = colormap_to_colors(nusc.colormap, nusc.lidarseg_name2idx_mapping)
-                filter_lidarseg_labels = get_labels_in_coloring(color_legend, coloring)
-            else:
-                # Only show legends for all stuff categories for panoptic.
-                filter_lidarseg_labels = stuff_cat_ids(len(nusc.lidarseg_name2idx_mapping))
 
     if out_path is not None:
         plt.savefig(out_path, bbox_inches='tight', pad_inches=0, dpi=200)

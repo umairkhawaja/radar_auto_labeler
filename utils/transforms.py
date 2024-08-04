@@ -115,38 +115,3 @@ def transform_points_to_car_frame(points, calibs):
         transformed_points.append(result_point)
         
     return np.array(transformed_points)
-
-
-def convert_to_open3d_pcd(np_points):
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(np_points[:, :3])
-    return pcd
-
-def align_pointclouds(source, target):
-    threshold = 0.5
-    trans_init = np.eye(4)
-    reg_p2p = o3d.pipelines.registration.registration_icp(
-        source, target, threshold, trans_init,
-        o3d.pipelines.registration.TransformationEstimationPointToPoint())
-    return reg_p2p.transformation
-
-def find_overlapping_points(pcd, threshold=0.1):
-    pcd_tree = o3d.geometry.KDTreeFlann(pcd)
-    overlapping_indices = set()
-    points = np.asarray(pcd.points)
-    for i, point in enumerate(points):
-        [_, idx, _] = pcd_tree.search_radius_vector_3d(point, threshold)
-        if len(idx) > 1:
-            overlapping_indices.add(i)
-    return overlapping_indices
-
-# Map overlapping indices back to the original point clouds
-def get_original_indices(pcd_merged, pcd, overlapping_indices):
-    merged_points = np.asarray(pcd_merged.points)
-    pcd_points = np.asarray(pcd.points)
-    tree = o3d.geometry.KDTreeFlann(pcd)
-    original_indices = set()
-    for idx in overlapping_indices:
-        [_, idxs, _] = tree.search_radius_vector_3d(merged_points[idx], 0.1)
-        original_indices.update(idxs)
-    return original_indices
