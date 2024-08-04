@@ -52,7 +52,7 @@ class RANSACSolver:
         v = (pcl[:, 5]**2 + pcl[:, 6]**2)**0.5                     # target's absolute velocity in radar frame
         v_comp = (pcl[:, 7]**2 + pcl[:, 8]**2)**0.5                                      # target's absolute velocity in global frame
         theta = np.arctan(pcl[:, 1] / (pcl[:, 0] + 1e-5))          # azimuth
-        theta_v = np.arctan(pcl[:, 7] / (pcl[:, 6] + 1e-5))
+        theta_v = np.arctan(pcl[:, 6] / (pcl[:, 5] + 1e-5))
         theta_r = theta - theta_v
         v_r = v * np.cos(theta_r)                                  # doppler range velocity
         low_sp_r = np.sum(np.abs(v_r) < 1) / v_r.shape[0]
@@ -138,14 +138,14 @@ class RANSACSolver:
             ax[0][1].set_xlabel('x(m)')
             ax[0][1].set_ylabel('y(m)')
 
-            output_file = os.path.join('ransac_nusc/', 'scene{}_frame{}_sensor_{}_count{}.jpg'.format(info[0][0], info[0][1], info[1], info[2]))
+            output_file = os.path.join('../output/ransac_nusc/', 'scene{}_frame{}_sensor_{}_count{}.jpg'.format(info[0][0], info[0][1], info[1], info[2]))
             plt.savefig(output_file)
             plt.close()
 
             # visulize DTR on count4
             if info[2] == 0:
                 import pickle
-                with open(os.path.join(f'ransac_nusc/{info[0][0]}_vr.pickle'), 'wb') as handle:
+                with open(os.path.join(f'output/ransac_nusc/{info[0][0]}_vr.pickle'), 'wb') as handle:
                     feature = {'theta': theta, 'v_r': v_r, 'best_alpha_pre': best_alpha_pre, 'best_vs_pre':best_vs_pre}
                     pickle.dump(feature, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
