@@ -30,8 +30,10 @@ RADIUS = 2
 USE_LIDAR_LABELS = False
 USE_OCCUPANCY_PRIORS = True
 FILTER_BY_POSES = False
-FILTER_BY_RADIUS = True
+FILTER_BY_RADIUS = False
 FILTER_OUT_OF_BOUNDS = False
+USE_COMBINED_MAP = True
+
 
 
 ref_frame = 'global'
@@ -43,10 +45,10 @@ dpr_thresh = 0.5
 voxel_size = 0.5
 
 
-DATA_DIR = "/home/umair/workspace/datasets/nuscenes_radar/"
+DATA_DIR = "/shared/data/nuScenes/"
 SENSORS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
 
-OUTPUT_DIR = f'output_sw{num_sweeps}-dpr{dpr_thresh}-r{RADIUS}_filter_radius'
+OUTPUT_DIR = f'output_sw{num_sweeps}-dpr{dpr_thresh}-r{RADIUS}_combined_maps'
 OCTOMAP_DIR = osp.join(OUTPUT_DIR, 'octomaps')
 LABELS_DIR = osp.join(OUTPUT_DIR, 'labelled_maps')
 PLOTS_DIR = osp.join(OUTPUT_DIR, 'plots')
@@ -183,7 +185,7 @@ def process_scene(i, row):
         scene_maps=scene_maps, ref_map_id=ref_scene_name, scene_poses=scene_poses,
         scene_octomaps=scene_octomaps, lidar_labels=lidar_labels,
         dynamic_priors=scene_voxel_maps, use_octomaps=True,
-        search_in_radius=SEARCH_IN_RADIUS, radius=RADIUS,
+        search_in_radius=SEARCH_IN_RADIUS, radius=RADIUS, use_combined_map=USE_COMBINED_MAP,
         downsample=True, voxel_size=voxel_size, filter_out_of_bounds=FILTER_OUT_OF_BOUNDS
     )
 

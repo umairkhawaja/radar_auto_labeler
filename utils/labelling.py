@@ -83,3 +83,14 @@ def create_voxel_map(radar_scans, voxel_size):
         voxel_hash_map.update_with_scan(point_cloud)
     return voxel_hash_map
 
+def get_sps_labels(map, scan_points):
+    labeled_map_points = map[:, :3]
+    labeled_map_labels = map[:, -1]
+
+    sps_labels = []
+    for point in scan_points[:, :3]:
+        distances = np.linalg.norm(labeled_map_points - point, axis=1)
+        closest_point_idx = np.argmin(distances)
+        sps_labels.append(labeled_map_labels[closest_point_idx])
+    sps_labels = np.array(sps_labels)
+    return sps_labels

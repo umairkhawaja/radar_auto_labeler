@@ -9,7 +9,7 @@ from PIL import Image
 from pyquaternion import Quaternion
 from nuscenes.utils.geometry_utils import view_points, transform_matrix
 from matplotlib.colors import LinearSegmentedColormap
-
+from utils.labelling import get_sps_labels
 
 def plot_maps(scene_maps, poses, size=0.5, zoom_level=3):
     plt.figure(figsize=(10, 10))

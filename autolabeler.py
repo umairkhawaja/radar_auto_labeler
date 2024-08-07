@@ -19,6 +19,7 @@ class AutoLabeler:
                  radius=1.5,
                  fallback_map_radius=100,
                  filter_out_of_bounds=False,
+                 use_combined_map=False,
                  voxel_size=0.5):
         
         self.use_octomaps = use_octomaps
@@ -32,6 +33,7 @@ class AutoLabeler:
         self.scene_poses = scene_poses
         self.occluded_point = -1
         self.filter_out_of_bounds = filter_out_of_bounds
+        self.use_combined_map = use_combined_map
 
         if downsample:
             self.maps = {}
@@ -134,7 +136,11 @@ class AutoLabeler:
                 labeled_map = self.adjust_stability_scores(labeled_map, map_id)
 
             self.labelled_maps[map_id] = labeled_map
+
         self.labeled_environment_map = np.vstack([m for m in self.labelled_maps.values()])
+        if self.use_combined_map:
+            for map_id in self.labelled_maps:
+                self.labelled_maps[map_id] = self.labeled_environment_map
 
 
     def get_distance_to_closest_point(self, point, points, euclidean_weight=1, rcs_weight=0):

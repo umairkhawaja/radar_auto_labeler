@@ -15,6 +15,7 @@ from nuscenes.utils.geometry_utils import transform_matrix
 
 from utils.ransac_solver import RANSACSolver
 from utils.transforms import *
+from utils.labelling import  get_sps_labels
 RadarPointCloud.default_filters()
 
 class NuScenesDataloader:
@@ -69,7 +70,8 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                  sensors: list= [],
                  filter_dynamic_pts=False,
                  sps_labels_dir=None,
-                 sps_thresh=0.6,
+                 sps_thresh=0.5,
+                 return_sps_scores=False,
                  apply_dpr = False,
                  ransac_threshold = 0.1,
                  ref_sensor='LIDAR_TOP',
@@ -107,6 +109,11 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
         self.filter_dynamic_pts = filter_dynamic_pts
         self.sps_labels_dir = sps_labels_dir
         self.sps_thresh = sps_thresh
+        self.return_sps_scores = return_sps_scores
+        if self.return_sps_scores:
+            # Filtering will take outside the dataloader then
+            self.sps_thresh = -1
+
         self.min_distance = 1.0 # For Multi-sweep reading
 
         
@@ -160,6 +167,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
         global_from_car = self.global_poses[idx]
 
         parsed_points = None
+        parsed_sps_scores = []
 
         if self.ref_frame == self.ref_sensor and self.ref_frame is not None:
             # Just return the reference sensor pcd
@@ -212,17 +220,6 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
             labelled_map_path = os.path.join(self.sps_labels_dir, f'scene-{self.sequence_id}.asc')
             lmap = np.loadtxt(labelled_map_path, delimiter=' ', skiprows=1)
 
-            def get_sps_labels(map, scan_points):
-                labeled_map_points = map[:, :3]
-                labeled_map_labels = map[:, -1]
-
-                sps_labels = []
-                for point in scan_points[:, :3]:
-                    distances = np.linalg.norm(labeled_map_points - point, axis=1)
-                    closest_point_idx = np.argmin(distances)
-                    sps_labels.append(labeled_map_labels[closest_point_idx])
-                sps_labels = np.array(sps_labels)
-                return sps_labels
 
             if self.ref_frame is None:
                 # Need to extract labels for each sensor's points 
@@ -233,6 +230,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                     ego_sensor_pcd = transform_doppler_points(calibs[s_idx], sensor_pcd)
                     global_sensor_pcd = transform_doppler_points(global_from_car, ego_sensor_pcd)
                     sensor_pcd_labels = get_sps_labels(lmap, global_sensor_pcd)
+                    parsed_sps_scores.append(sensor_pcd_labels)
                     sps_filtered_pcd = sensor_pcd[sensor_pcd_labels >= self.sps_thresh]
                     # print(f"Before: {len(sensor_pcd)} | After {len(sps_filtered_pcd)}")
                     if len(sps_filtered_pcd) == 0:
@@ -249,6 +247,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                 sps_labels = get_sps_labels(lmap, global_sensor_pcd)
                 sps_filtered_pcd = sps_filtered_pcd[sps_labels >= self.sps_thresh]
                 parsed_points = [sps_filtered_pcd.astype(np.float64)]
+                parsed_sps_scores = sps_labels
 
             elif self.ref_frame == 'ego':
                 sps_filtered_pcd = parsed_points
@@ -256,14 +255,18 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                 sps_labels = get_sps_labels(lmap, global_sensor_pcd)
                 sps_filtered_pcd = sps_filtered_pcd[sps_labels >= self.sps_thresh]
                 parsed_points = sps_filtered_pcd.astype(np.float64)
+                parsed_sps_scores = sps_labels
             
             elif self.ref_frame == 'global':
                 sps_labels = get_sps_labels(lmap, parsed_points)
                 sps_filtered_pcd = sps_filtered_pcd[sps_labels >= self.sps_thresh]
                 parsed_points = sps_filtered_pcd.astype(np.float64)
+                parsed_sps_scores = sps_labels
 
-
-        return parsed_points
+        if self.return_sps_scores:
+            return parsed_points, parsed_sps_scores
+        else:
+            return parsed_points
 
     @staticmethod
     def filter_static_reliable_points(pointcloud):
