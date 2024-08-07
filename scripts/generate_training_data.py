@@ -163,11 +163,9 @@ def save_sensor_data(data, sequence_name, base_dir):
     sequence_dir = os.path.join(base_dir, "sequence", sequence_name)
     scans_dir = os.path.join(sequence_dir, "scans")
     poses_dir = os.path.join(sequence_dir, "poses")
-    map_transform_dir = os.path.join(sequence_dir, "map_transform")
 
     os.makedirs(scans_dir, exist_ok=True)
     os.makedirs(poses_dir, exist_ok=True)
-    os.makedirs(map_transform_dir, exist_ok=True)
 
     for idx, sensor_data in enumerate(data):
         combined_pointclouds = []
@@ -190,7 +188,7 @@ def save_sensor_data(data, sequence_name, base_dir):
         np.save(scan_file, combined_pointcloud)
         np.savetxt(pose_file, sensor_data['ego_pose'], delimiter=',')
 
-        map_transform_file = os.path.join(map_transform_dir, "map_transform.txt")
+        map_transform_file = os.path.join(sequence_dir, "map_transform.txt")
         if not os.path.exists(map_transform_file):
             dummy_transform = np.eye(4)
             np.savetxt(map_transform_file, dummy_transform, delimiter=',')
