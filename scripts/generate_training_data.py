@@ -197,6 +197,8 @@ def save_sensor_data(data, sequence_name, base_dir):
 def process_scene(row):
     ref_scene_name = row['scene_name']
     ref_split = row['split']
+    closest_scenes = row['closest_scenes']
+    closest_scenes_data = row['closest_scenes_data']
     seq = int(ref_scene_name.split("-")[-1])
 
     dataset_sequence = NuScenesMultipleRadarMultiSweeps(
@@ -217,6 +219,28 @@ def process_scene(row):
 
     data = extract_data(dataset_sequence)
     save_sensor_data(data, ref_scene_name, base_dir)
+
+    for scene in closest_scenes:
+        seq = int(scene.split("-")[-1])
+        dataset_sequence = NuScenesMultipleRadarMultiSweeps(
+            data_dir=data_dir,
+            nusc=nuscenes_exp[closest_scenes_data[scene]['split']],
+            sequence=seq,
+            sensors=sensors,
+            nsweeps=num_sweeps,
+            ref_frame=ref_frame,
+            ref_sensor=ref_sensor,
+            sps_thresh=0.0,
+            return_sps_scores=True,
+            sps_labels_dir=sps_maps_dir,
+            apply_dpr=apply_dpr,
+            filter_points=filter_points,
+            ransac_threshold=dpr_thresh
+        )
+
+        data = extract_data(dataset_sequence)
+        save_sensor_data(data, scene, base_dir)
+
 
 # Function to create train, val, test split and write to disk
 def create_splits(sps_df, base_dir):
