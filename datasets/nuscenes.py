@@ -397,7 +397,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                 radar_points = radar_points.T
                 radar_points = np.hstack((radar_points, times.transpose()))
 
-                if self.apply_dpr and radar_points.shape[0] > 1:
+                if self.apply_dpr and radar_points.shape[0] > 1 and (sensor not in ['RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT']):
                     nbr_flag = np.cumsum(nbr_points)
                     pcl_list = np.split(radar_points, nbr_flag, axis=0)
                     pcls_new = np.zeros((0, 10))
