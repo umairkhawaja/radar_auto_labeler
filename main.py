@@ -144,34 +144,7 @@ def process_scene(i, row):
         lidar_labels = None
 
     if USE_OCCUPANCY_PRIORS:
-        voxel_prior_dataloaders = {ref_scene_name: NuScenesMultipleRadarMultiSweeps(
-            data_dir=DATA_DIR,
-            nusc=nuscenes_exp[ref_split],
-            sequence=int(ref_scene_name.split("-")[-1]),
-            sensors=SENSORS,
-            nsweeps=num_sweeps,
-            ref_frame='global',
-            ref_sensor=ref_sensor,
-            apply_dpr=True,
-            filter_points=False,
-            ransac_threshold=dpr_thresh
-        )}
-
-        for matched_scene, data in closest_scenes.items():
-            voxel_prior_dataloaders[matched_scene] = NuScenesMultipleRadarMultiSweeps(
-                data_dir=DATA_DIR,
-                nusc=nuscenes_exp[data['split']],
-                sequence=int(matched_scene.split("-")[-1]),
-                sensors=SENSORS,
-                nsweeps=num_sweeps,
-                ref_frame='global',
-                ref_sensor=ref_sensor,
-                apply_dpr=True,
-                filter_points=False,
-                ransac_threshold=dpr_thresh
-            )
-
-        scene_scans = {name: {i: dataloader[i][0][:, :3] for i in range(len(dataloader))} for name, dataloader in voxel_prior_dataloaders.items()}
+        scene_scans = {name: {i: dataloader[i][0][:, :3] for i in range(len(dataloader))} for name, dataloader in dataloaders.items()}
         scene_voxel_maps = {name: create_voxel_map(scans, voxel_size) for name, scans in scene_scans.items()}
     else:
         scene_voxel_maps = None

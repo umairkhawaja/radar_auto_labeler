@@ -65,7 +65,6 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                  nusc,
                  data_dir: Path,
                  sequence: int,
-                 seq_crop_indices: list = [],
                  nsweeps = 5,
                  sensors: list= [],
                  filter_dynamic_pts=False,
@@ -100,7 +99,6 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
 
         self.ref_frame = ref_frame
 
-        self.seq_crop_indices = seq_crop_indices # Keep between of these frames only
         assert(nsweeps > 0), "Number of sweeps should be >= 1"
         self.n_sweeps = nsweeps
         self.measure_range = measure_range
@@ -385,7 +383,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                 radar_points = radar_points.T
                 radar_points = np.hstack((radar_points, times.transpose()))
 
-                if self.apply_dpr and radar_points.shape[0] > 1 and (sensor not in ['RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT']):
+                if self.apply_dpr and radar_points.shape[0] > 1:
                     nbr_flag = np.cumsum(nbr_points)
                     pcl_list = np.split(radar_points, nbr_flag, axis=0)
                     pcls_new = np.zeros((0, 10))
@@ -402,8 +400,11 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                         pcls_new = np.vstack((pcls_new, pcl))
                     radar_points = pcls_new
 
-                pcd_dict[sensor] = np.concatenate((pcd_dict[sensor], radar_points), axis=0)
-                sensor_ids.extend([sensor] * len(radar_points))
+                if self.ref_frame is not None and self.ref_frame == self.ref_sensor:
+                    pcd_dict[self.ref_sensor] = np.concatenate((pcd_dict[self.ref_sensor], radar_points), axis=0)
+                    sensor_ids.extend([sensor] * len(radar_points))
+                else:
+                    pcd_dict[sensor] = np.concatenate((pcd_dict[sensor], radar_points), axis=0)
 
             pose = np.empty((4, 4), dtype=np.float32)
             pose_record = self.nusc.get("ego_pose", ref_sample_data["ego_pose_token"])
@@ -435,7 +436,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
         remaining = self.num_readings % self.n_sweeps
         if remaining > 0:
             process_sweeps(self.num_readings - 1, remaining)
-
+ 
         sorted_frames = sorted(frames, key=lambda t: t['timestamp'])
         frames = list(sorted_frames)
         for frame in frames:

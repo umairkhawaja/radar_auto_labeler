@@ -19,6 +19,7 @@ def plot_maps(scene_maps, poses, size=0.5, zoom_level=3):
     positions = {name: np.array(pose)[:, :3,3] for name,pose in poses.items()}
 
     for idx, (scene_name, map) in enumerate(scene_maps.items()):
+
         plt.scatter(map[:, 0], map[:, 1], s=size, label=scene_name, alpha=0.5)
 
 

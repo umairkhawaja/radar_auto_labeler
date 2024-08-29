@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable, get_cmap
 
-def build_octomap(dl, resolution=0.1):
+def build_octomap(dl, resolution=0.01):
     # Initialize the OctoMap with the specified resolution
     poses = dl.global_poses
     num_readings = dl.num_readings
@@ -25,6 +25,9 @@ def build_octomap(dl, resolution=0.1):
 
     for i in tqdm(range(num_readings)):
         pointcloud = dl[i][0]
+        if type(pointcloud) == list and len(pointcloud) == 1:
+            pointcloud = pointcloud[0]
+
         pose = poses[i]
         sensor_origin = pose[:3, 3]
         octree.insertPointCloud(pointcloud, sensor_origin)
