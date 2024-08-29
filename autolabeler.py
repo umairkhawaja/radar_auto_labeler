@@ -286,8 +286,8 @@ class AutoLabeler:
         
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
-        circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
-        plt.gca().add_artist(circle)
+        # circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
+        # plt.gca().add_artist(circle)
         plt.colorbar(label='Stability')
         plt.xlabel('X')
         plt.ylabel('Y')
@@ -314,8 +314,8 @@ class AutoLabeler:
         
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
-        circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
-        plt.gca().add_artist(circle)
+        # circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
+        # plt.gca().add_artist(circle)
         plt.colorbar(label='Stability')
         plt.xlabel('X')
         plt.ylabel('Y')
