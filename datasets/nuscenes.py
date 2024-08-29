@@ -77,6 +77,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                  ref_sensor='LIDAR_TOP',
                  ref_frame=None,
                  measure_range = 100,
+                 reformat_pcl = True,
                  nusc_version: str = "v1.0-mini",
                  annotated_keyframes: bool = False, *_, **__):
         """
@@ -115,6 +116,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
             self.sps_thresh = -1
 
         self.min_distance = 1.0 # For Multi-sweep reading
+        self.reformat_pcl = reformat_pcl
 
         
         if annotated_keyframes:
@@ -172,21 +174,27 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
         if self.ref_frame == self.ref_sensor and self.ref_frame is not None:
             # Just return the reference sensor pcd
             points = pcd[self.ref_sensor]
-            pointcloud_reformatted = np.zeros((len(points), 6))
-            pointcloud_reformatted[:, :3] = points[:, :3] # x y z
-            pointcloud_reformatted[:, 3] = points[:, 3] # rcs
-            pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
-            pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
-            parsed_points = [pointcloud_reformatted.astype(np.float64)]
-        elif self.ref_frame is None:
-            # Output each pointcloud in its own sensor frame
-            for sensor in self.sensors:
-                points = pcd[sensor]
+            if self.reformat_pcl:
                 pointcloud_reformatted = np.zeros((len(points), 6))
                 pointcloud_reformatted[:, :3] = points[:, :3] # x y z
                 pointcloud_reformatted[:, 3] = points[:, 3] # rcs
                 pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
                 pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+            else:
+                pointcloud_reformatted = points
+            parsed_points = [pointcloud_reformatted.astype(np.float64)]
+        elif self.ref_frame is None:
+            # Output each pointcloud in its own sensor frame
+            for sensor in self.sensors:
+                points = pcd[sensor]
+                if self.reformat_pcl:
+                    pointcloud_reformatted = np.zeros((len(points), 6))
+                    pointcloud_reformatted[:, :3] = points[:, :3] # x y z
+                    pointcloud_reformatted[:, 3] = points[:, 3] # rcs
+                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
+                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                else:
+                    pointcloud_reformatted = points
                 pointclouds.append(pointcloud_reformatted.astype(np.float64))
             parsed_points = pointclouds
         
@@ -194,22 +202,28 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
             # Transform pointcloud to the ego vehicle frame for each sensor and stack them
             for sensor, car_from_sensor in zip(self.sensors, calibs):
                 points = pcd[sensor]
-                pointcloud_reformatted = np.zeros((len(points), 6))
-                pointcloud_reformatted[:, :3] = points[:, :3] # x y z
-                pointcloud_reformatted[:, 3] = points[:, 3] # rcs
-                pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
-                pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                if self.reformat_pcl:
+                    pointcloud_reformatted = np.zeros((len(points), 6))
+                    pointcloud_reformatted[:, :3] = points[:, :3] # x y z
+                    pointcloud_reformatted[:, 3] = points[:, 3] # rcs
+                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
+                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                else:
+                    pointcloud_reformatted = points
                 ego_points = transform_doppler_points(car_from_sensor, pointcloud_reformatted.astype(np.float64))
                 pointclouds.append(ego_points)
             parsed_points = np.vstack(pointclouds)
         elif self.ref_frame == 'global':
             for sensor, car_from_sensor in zip(self.sensors, calibs):
                 points = pcd[sensor]
-                pointcloud_reformatted = np.zeros((len(points), 6))
-                pointcloud_reformatted[:, :3] = points[:, :3] # x y z
-                pointcloud_reformatted[:, 3] = points[:, 3] # rcs
-                pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
-                pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                if self.reformat_pcl:
+                    pointcloud_reformatted = np.zeros((len(points), 6))
+                    pointcloud_reformatted[:, :3] = points[:, :3] # x y z
+                    pointcloud_reformatted[:, 3] = points[:, 3] # rcs
+                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
+                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                else:
+                    pointcloud_reformatted = points
                 ego_points = transform_doppler_points(car_from_sensor, pointcloud_reformatted.astype(np.float64))
                 global_points = transform_doppler_points(global_from_car, ego_points)
                 pointclouds.append(global_points)
@@ -217,7 +231,11 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
 
         if self.sps_labels_dir is not None:
             # Label and filter points
-            labelled_map_path = os.path.join(self.sps_labels_dir, f'scene-{self.sequence_id}.asc')
+            if self.sps_labels_dir.endswith('asc'):
+                # A map is directly provided
+                labelled_map_path = self.sps_labels_dir
+            else:
+                labelled_map_path = os.path.join(self.sps_labels_dir, f'scene-{self.sequence_id}.asc')
             lmap = np.loadtxt(labelled_map_path, delimiter=' ', skiprows=1)
 
 
@@ -268,36 +286,6 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
         else:
             return parsed_points
 
-    @staticmethod
-    def filter_static_reliable_points(pointcloud):
-        """
-        Filters radar pointcloud data to keep the most reliable static points.
-        
-        :param pointcloud: <np.float: d, n>. Point cloud matrix with d dimensions and n points.
-        :return: Filtered point cloud matrix.
-        """
-        
-        # Define the states to keep
-        invalid_states_to_keep = [0,4,8,9,10,11,12,15,16,17]
-        dynprop_states_to_keep = [1, 3, 5, 7]
-        ambig_states_to_keep = [3]
-        
-        # Extract relevant fields from the point cloud data
-        dyn_prop = pointcloud[3, :]
-        invalid_state = pointcloud[15, :]
-        ambig_state = pointcloud[11, :]
-
-        # Create a boolean mask for each condition
-        mask_dynprop = np.isin(dyn_prop, dynprop_states_to_keep)
-        mask_invalid = np.isin(invalid_state, invalid_states_to_keep)
-        mask_ambig = np.isin(ambig_state, ambig_states_to_keep)
-        
-        # Combine masks to filter points that satisfy all conditions
-        combined_mask = mask_dynprop & mask_invalid & mask_ambig
-        # Filter the point cloud
-        filtered_pointcloud = pointcloud[:, combined_mask]
-        
-        return filtered_pointcloud
     
     def _read_frames_multisweeps(self):
         """
@@ -456,7 +444,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
 
 
     def read_calibs(self, idx):
-        if self.ref_frame == self.ref_sensor and self.ref_frame is not None:
+        if self.ref_sensor is not None:
             calib = self.nusc.get('calibrated_sensor', self.sensor_readings[self.ref_sensor][idx]['calibrated_sensor_token'])
             sensor_to_car = transform_matrix(calib['translation'], Quaternion(calib['rotation']), inverse=False)
             return [sensor_to_car]
