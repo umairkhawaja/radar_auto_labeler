@@ -73,7 +73,6 @@ def save_plots_for_scene(nusc, base_dir, scene_name, sample_token, sps_map, num_
 def create_video_from_plots(base_dir, scene_name):
     plot_dir = os.path.join(base_dir, scene_name, 'frames')
     num_frames = len(os.listdir(plot_dir))
-
     sample_image = cv2.imread(os.path.join(plot_dir, '0.png'))
 
     
@@ -87,7 +86,7 @@ def create_video_from_plots(base_dir, scene_name):
 
     
     for i in range(num_frames):
-        img = cv2.imread(os.path.join(plot_dir, f'{i}.png'))
+        img = cv2.resize(cv2.imread(os.path.join(plot_dir, f'{i}.png')), (video_width, video_height))
         out.write(img)
     out.release()
 
