@@ -7,9 +7,10 @@ from matplotlib import pyplot as plt
 np.random.seed(42)
 
 class RANSACSolver:
-    def __init__(self, threshold=0.05, max_iter=20) -> None:
+    def __init__(self, threshold=0.05, max_iter=20, outdir=None) -> None:
         self.threshold = threshold
         self.max_iter = max_iter
+        self.outdir = outdir
 
     def least_square_solver(self, theta, vr):
         '''
@@ -137,15 +138,15 @@ class RANSACSolver:
             ax[0][1].set_title('v_comp(compensated by ego-motion)')
             ax[0][1].set_xlabel('x(m)')
             ax[0][1].set_ylabel('y(m)')
-
-            output_file = os.path.join('../output/ransac_nusc/', 'scene{}_frame{}_sensor_{}_count{}.jpg'.format(info[0][0], info[0][1], info[1], info[2]))
+            assert(self.outdir)
+            output_file = os.path.join(self.outdir, 'scene{}_frame{}_sensor_{}_count{}.jpg'.format(info[0][0], info[0][1], info[1], info[2]))
             plt.savefig(output_file)
             plt.close()
 
             # visulize DTR on count4
             if info[2] == 0:
                 import pickle
-                with open(os.path.join(f'output/ransac_nusc/{info[0][0]}_vr.pickle'), 'wb') as handle:
+                with open(os.path.join(f'{self.outdir}/{info[0][0]}_vr.pickle'), 'wb') as handle:
                     feature = {'theta': theta, 'v_r': v_r, 'best_alpha_pre': best_alpha_pre, 'best_vs_pre':best_vs_pre}
                     pickle.dump(feature, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
