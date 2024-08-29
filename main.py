@@ -26,29 +26,29 @@ sps_df = pd.read_json(DF_PATH)
 
 ICP_FILTERING = True
 SEARCH_IN_RADIUS = True
-RADIUS = 2
+RADIUS = 1
 USE_LIDAR_LABELS = False
 USE_OCCUPANCY_PRIORS = True
 FILTER_BY_POSES = False
 FILTER_BY_RADIUS = False
 FILTER_OUT_OF_BOUNDS = False
-USE_COMBINED_MAP = True
+USE_COMBINED_MAP = False
 
 
 
 ref_frame = 'global'
 num_sweeps = 5
-ref_sensor = None
-apply_dpr = True
+ref_sensor = 'RADAR_FRONT'
+apply_dpr = False
 filter_points = False
-dpr_thresh = 0.5
-voxel_size = 0.5
+dpr_thresh = 0.0
+voxel_size = 0.1
 
 
 DATA_DIR = "/shared/data/nuScenes/"
 SENSORS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
 
-OUTPUT_DIR = f'output_sw{num_sweeps}-dpr{dpr_thresh}-r{RADIUS}_combined_maps'
+OUTPUT_DIR = f'output_sw{num_sweeps}-dpr{dpr_thresh}-r{RADIUS}'
 OCTOMAP_DIR = osp.join(OUTPUT_DIR, 'octomaps')
 LABELS_DIR = osp.join(OUTPUT_DIR, 'labelled_maps')
 PLOTS_DIR = osp.join(OUTPUT_DIR, 'plots')
