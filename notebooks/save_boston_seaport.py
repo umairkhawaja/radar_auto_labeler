@@ -25,7 +25,7 @@ plt.ioff()
 import concurrent.futures
 # from multiprocess.pool import Pool
 
-
+MAP_NAME = 'boston-seaport_sps_all_scenes'
 
 NUM_WORKERS = min(cpu_count(), 12)  # Adjust this number based on your machine's capabilities
 DF_PATH = '../sps_nuscenes_more_matches_df.json' # Sticking to this since odom/loc benchmarking was done on this to compare experiments
@@ -38,6 +38,7 @@ nuscenes_exp = {
     vname: NuScenes(dataroot=DATA_DIR, version=version, verbose=False)
     for vname, version in versions.items()
 }
+combined_scenes = [{'scene': scene, 'split': 'trainval'} for scene in nuscenes_exp['trainval'].scene] + [{'scene': scene, 'split': 'test'} for scene in nuscenes_exp['test'].scene]
 
 
 REF_FRAME = None
@@ -107,9 +108,9 @@ def process_row(row):
         )
 
     # Process and downsample point clouds
-    scene_pointclouds = {name : [dl[i][0] for i in range(dl.num_readings)] for name,dl in dataloaders.items()}
-    scene_calibs = {name : [dl[i][1] for i in range(dl.num_readings)] for name,dl in dataloaders.items()}
-    scene_poses = {name: dl.global_poses for name,dl in dataloaders.items()}
+    pointclouds = {name : [dl[i][0] for i in range(dl.num_readings)] for name,dl in row_dls.items()}
+    calibs = {name : [dl[i][1] for i in range(dl.num_readings)] for name,dl in row_dls.items()}
+    poses = {name: dl.global_poses for name,dl in row_dls.items()}
 
     # downsampled_pointclouds = {
     #     name: o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pcls[:,:3])).voxel_down_sample(voxel_size=0.05).points
@@ -119,18 +120,18 @@ def process_row(row):
     # scene_map = {name: pcls for name, pcls in downsampled_pointclouds.items()}
 
     ## Applying DPR
-    scene_pointclouds_dpr_masks, global_scene_pointclouds = remove_dynamic_points(scene_pointclouds, scene_calibs, scene_poses, SENSORS, filter_sensors=True, dpr_thresh=DPR_THRESH, save_vis=False)
+    scene_pointclouds_dpr_masks, global_scene_pointclouds = remove_dynamic_points(pointclouds, calibs, poses, SENSORS, filter_sensors=True, dpr_thresh=DPR_THRESH, save_vis=False)
 
     scene_dpr_masks = {name : np.hstack(masks) for name,masks in scene_pointclouds_dpr_masks.items()}
-    scene_maps = {name : np.vstack(pcls) for name,pcls in global_scene_pointclouds.items()}
+    global_scene_maps = {name : np.vstack(pcls) for name,pcls in global_scene_pointclouds.items()}
 
     static_scene_maps = {}
     dynamic_scene_maps = {}
     dpr_sps_maps = {}
 
-    for name in scene_maps:
+    for name in global_scene_maps:
         indices = scene_dpr_masks[name]
-        map_pcl = scene_maps[name]
+        map_pcl = global_scene_maps[name]
         filtered_map_pcl = map_pcl[indices]
         static_scene_maps[name] = filtered_map_pcl
         dynamic_scene_maps[name] = map_pcl[~indices]
@@ -141,7 +142,65 @@ def process_row(row):
     dynamic_scene_maps = filter_maps_icp(dynamic_scene_maps, alignment_thresh=0.5, overlapping_thresh=0.25)
 
     
-    return global_scene_pointclouds, static_scene_maps, dynamic_scene_maps, scene_poses, row_dls
+    return global_scene_pointclouds, static_scene_maps, dynamic_scene_maps, poses, row_dls
+
+# Define a function for processing each row
+def process_scene(scene_data):
+    scene_name = scene_data['scene']['name']
+    scene_split = scene_data['split']
+
+
+    row_dls = {scene_name: NuScenesMultipleRadarMultiSweeps(
+        data_dir=DATA_DIR,
+        nusc=nuscenes_exp[scene_split],
+        sequence=int(scene_name.split("-")[-1]),
+        sensors=SENSORS,
+        nsweeps=NUM_SWEEPS,
+        ref_frame=REF_FRAME,
+        ref_sensor=REF_SENSOR,
+        apply_dpr=False,
+        filter_points=FILTER_POINTS,
+        ransac_threshold=-1,
+        reformat_pcl=False
+    )}
+
+    # Process and downsample point clouds
+    pointclouds = {name : [dl[i][0] for i in range(dl.num_readings)] for name,dl in row_dls.items()}
+    calibs = {name : [dl[i][1] for i in range(dl.num_readings)] for name,dl in row_dls.items()}
+    poses = {name: dl.global_poses for name,dl in row_dls.items()}
+
+    # downsampled_pointclouds = {
+    #     name: o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pcls[:,:3])).voxel_down_sample(voxel_size=0.05).points
+    #     for name, pcls in maps.items()
+    # }
+    # Consolidate downsampled point clouds
+    # scene_map = {name: pcls for name, pcls in downsampled_pointclouds.items()}
+
+    ## Applying DPR
+    scene_pointclouds_dpr_masks, global_scene_pointclouds = remove_dynamic_points(pointclouds, calibs, poses, SENSORS, filter_sensors=True, dpr_thresh=DPR_THRESH, save_vis=False)
+
+    scene_dpr_masks = {name : np.hstack(masks) for name,masks in scene_pointclouds_dpr_masks.items()}
+    global_scene_maps = {name : np.vstack(pcls) for name,pcls in global_scene_pointclouds.items()}
+
+    static_scene_maps = {}
+    dynamic_scene_maps = {}
+    dpr_sps_maps = {}
+
+    for name in global_scene_maps:
+        indices = scene_dpr_masks[name]
+        map_pcl = global_scene_maps[name]
+        filtered_map_pcl = map_pcl[indices]
+        static_scene_maps[name] = filtered_map_pcl
+        dynamic_scene_maps[name] = map_pcl[~indices]
+
+        dpr_sps_pcl = np.hstack((map_pcl, np.array(indices).astype(np.int).reshape(-1, 1)))
+        dpr_sps_maps[name] = dpr_sps_pcl
+
+    dynamic_scene_maps = filter_maps_icp(dynamic_scene_maps, alignment_thresh=0.5, overlapping_thresh=0.25)
+
+    
+    return global_scene_pointclouds, static_scene_maps, dynamic_scene_maps, poses, row_dls
+
 
 # Parallel processing using ThreadPoolExecutor
 scene_pointclouds = {}
@@ -150,12 +209,29 @@ scene_maps = {}
 scene_poses = {}
 dataloaders = {}
 
+
+## Running over shortlisted scenes df
+# with concurrent.futures.ThreadPoolExecutor() as executor:
+#     future_to_row = {executor.submit(process_row, row): i for i, row in sps_df.iterrows()}
+    
+#     for future in concurrent.futures.as_completed(future_to_row):
+#         i = future_to_row[future]
+#         pointclouds, scene_map, dynamic_scene_map, scene_pose, row_dls = future.result()
+#         # If using downsampled o3d pcl
+#         # scene_map = {name: np.asarray(o3d_map) for name, o3d_map in scene_map.items()}
+#         scene_pointclouds.update(pointclouds)
+#         scene_maps.update(scene_map)
+#         dynamic_scene_maps.update(dynamic_scene_map)
+#         scene_poses.update(scene_pose)
+#         dataloaders.update(row_dls)
+
+
+## Running over all 1000 scenes available
 with concurrent.futures.ThreadPoolExecutor() as executor:
-    future_to_row = {executor.submit(process_row, row): i for i, row in sps_df.iterrows()}
+    future_to_row = {executor.submit(process_scene, scene): i for i, scene in enumerate(combined_scenes)}
     
     for future in concurrent.futures.as_completed(future_to_row):
         i = future_to_row[future]
-        # try:
         pointclouds, scene_map, dynamic_scene_map, scene_pose, row_dls = future.result()
         # If using downsampled o3d pcl
         # scene_map = {name: np.asarray(o3d_map) for name, o3d_map in scene_map.items()}
@@ -164,8 +240,6 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
         dynamic_scene_maps.update(dynamic_scene_map)
         scene_poses.update(scene_pose)
         dataloaders.update(row_dls)
-    # except Exception as e:
-        # print(f"Row {i} generated an exception: {e}")
 
 if FILTER_BY_POSES:
     scene_maps, scene_poses = create_filtered_maps(scene_poses, scene_pointclouds, threshold=1)
@@ -222,9 +296,9 @@ plt.scatter(points[:, 0], points[:, 1], c=stable_probs, cmap='RdYlGn', s=0.05)
 plt.colorbar(label='Stability')
 plt.xlabel('X')
 plt.ylabel('Y')
-plt.savefig(f'boston-seaport_sps.jpg', dpi=300)
+plt.savefig(f'{MAP_NAME}.jpg', dpi=300)
 
-filename = f"boston-seaport_sps.asc"
+filename = f"{MAP_NAME}.asc"
 np.savetxt(filename,
             np.hstack([points,stable_probs.reshape(-1,1)]),
             fmt='%.6f', delimiter=' ',
