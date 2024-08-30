@@ -1,5 +1,12 @@
 import numpy as np
 
+import repackage
+repackage.up()
+
+from utils.ransac_solver import RANSACSolver
+from utils.transforms import transform_doppler_points
+
+
 def transform_points(points, transformation_matrix):
     """
     Transform the points using the provided transformation matrix.
@@ -185,3 +192,78 @@ def aggregate_to_car_frame(pcs, calibs):
 def aggregate_to_sensor_frame(pcs):
     dummy_calibs = [np.eye(4) for _ in pcs]
     return aggregate_points(pcs, dummy_calibs, transform_to_car_frame=False)
+
+
+## Using Dani's Motion Estimation
+def process_point_clouds(point_clouds_dict, calib_dict, poses_dict, use_ransac=True, threshold=0.5):
+    inliers_dict = {name: [] for name in point_clouds_dict}
+    scene_pointclouds = {name: [] for name in point_clouds_dict}
+
+    for scene_name in point_clouds_dict:
+        scans_pcls = point_clouds_dict[scene_name]
+        scans_calibs = calib_dict[scene_name]
+        scans_poses = poses_dict[scene_name]
+        inliers_dict[scene_name] = []
+
+
+        for sensor_pcls, sensor_calibs, pose in zip(scans_pcls, scans_calibs, scans_poses):
+            # Aggregate point clouds to sensor frame
+            aggregated_points = aggregate_to_sensor_frame(sensor_pcls)
+
+            # Estimate velocity using RANSAC
+            velocity_estimate = estimate_velocity_from_multiple_sensors(aggregated_points, sensor_calibs, use_ransac, threshold)
+            estimated_w, estimated_v = velocity_estimate
+            
+            # Get inliers based on estimated velocity
+            inliers = get_inliers_from_known_velocity(aggregated_points, sensor_calibs, estimated_w, estimated_v, threshold)
+            inliers_dict[scene_name].append(inliers)
+
+            merged_pcls = []
+            for pcl, calib in zip(sensor_pcls, sensor_calibs):
+                ego_pcl = transform_doppler_points(calib, pcl)
+                global_pcl = transform_doppler_points(pose, ego_pcl)
+                merged_pcls.append(global_pcl)
+            scene_pointclouds[scene_name].append(np.vstack(merged_pcls))
+
+    
+    return inliers_dict, scene_pointclouds
+
+### AutoPlace Dynamic Point Removal
+
+def remove_dynamic_points(scene_pointclouds, scene_calibs, scene_poses, sensors, filter_sensors=False, dpr_thresh=0.15, save_vis=False):
+    ransac_solver = RANSACSolver(threshold=dpr_thresh, max_iter=10, outdir='output_dpr')
+
+    dpr_masks = {scene_name: [] for scene_name in scene_pointclouds}
+    global_scene_pointclouds = {scene_name: [] for scene_name in scene_pointclouds}
+
+
+    for scene_name in scene_pointclouds:
+        scans_pcl = scene_pointclouds[scene_name]
+        scans_calibs = scene_calibs[scene_name]
+        poses = scene_poses[scene_name]
+        
+        for index, (sensor_pcls, sensor_calibs, pose) in enumerate(zip(scans_pcl, scans_calibs, poses)):
+            merged_pcl_global = []
+            merged_pcl_dpr_mask = []
+
+            for sensor, pcl, calib in zip(sensors, sensor_pcls, sensor_calibs):
+                if filter_sensors and sensor in ['RADAR_FRONT_LEFT', 'RADAR_FRONT_RIGHT']:
+                    continue
+
+                if pcl.shape[0] > 1:
+                    info = [
+                        [scene_name, index],
+                        sensor,
+                        pcl.shape[0]
+                    ]
+                    best_mask, _, _ = ransac_solver.ransac_nusc(info=info, pcl=pcl, vis=(save_vis and sensor == 'RADAR_FRONT'))
+
+                    ego_points_sensor = transform_doppler_points(calib, pcl)
+                    global_points_sensor = transform_doppler_points(pose, ego_points_sensor)
+                    merged_pcl_global.append(global_points_sensor)
+                    merged_pcl_dpr_mask.append(best_mask)
+            
+            dpr_masks[scene_name].append(np.hstack(merged_pcl_dpr_mask))
+            global_scene_pointclouds[scene_name].append(np.vstack(merged_pcl_global))
+
+    return dpr_masks, global_scene_pointclouds

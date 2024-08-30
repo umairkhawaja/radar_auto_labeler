@@ -5,34 +5,28 @@ import open3d as o3d
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable, get_cmap
+from transforms import transform_doppler_points
 
-def build_octomap(dl, resolution=0.01):
+def build_octomap(dl, resolution=0.1):
     # Initialize the OctoMap with the specified resolution
     poses = dl.global_poses
     num_readings = dl.num_readings
     octree = octomap.OcTree(resolution)
-    
-    # Define occupancy thresholds
-    # prob_hit = 0.7  # Probability that a voxel is occupied when a point is observed
-    # prob_miss = 0.4  # Probability that a voxel is free when a ray passes through
-    # clamping_thres_min = 0.12  # Minimum probability value for occupancy
-    # clamping_thres_max = 0.97  # Maximum probability value for occupancy
 
-    # octree.setProbHit(prob_hit)
-    # octree.setProbMiss(prob_miss)
-    # octree.setClampingThresMin(clamping_thres_min)
-    # octree.setClampingThresMax(clamping_thres_max)
 
     for i in tqdm(range(num_readings)):
-        pointcloud = dl[i][0]
-        if type(pointcloud) == list and len(pointcloud) == 1:
-            pointcloud = pointcloud[0]
-
+        pointclouds = dl[i][0]
+        calibs = dl[i][1]
         pose = poses[i]
-        sensor_origin = pose[:3, 3]
-        octree.insertPointCloud(pointcloud, sensor_origin)
 
-    # occupied, empty = octree.extractPointCloud()
+        if type(pointclouds) == list:
+            for pointcloud, calib in zip(pointclouds, calibs):
+                ego_pointcloud = transform_doppler_points(calib, pointcloud)
+                global_pointcloud = transform_doppler_points(pose, ego_pointcloud)
+
+                sensor_origin = pose[:3, 3]
+                octree.insertPointCloud(global_pointcloud, sensor_origin)
+
     return octree
 
 

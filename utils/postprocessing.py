@@ -178,3 +178,35 @@ def create_filtered_indices(poses, reference_poses, threshold=0.1):
 
     return indices_to_keep
 
+
+def filter_maps_icp(scene_maps):
+    pcd_dict = {key: convert_to_open3d_pcd(val) for key, val in scene_maps.items()}
+    pcd_merged = o3d.geometry.PointCloud()
+    for pcd in pcd_dict.values():
+        pcd_merged += pcd
+
+    keys = list(pcd_dict.keys())
+    transforms = {}
+    for i in range(len(keys)):
+        for j in range(i + 1, len(keys)):
+            trans_key = f"{keys[i]}_{keys[j]}"
+            transforms[trans_key] = align_pointclouds(pcd_dict[keys[i]], pcd_dict[keys[j]])
+
+    for key, trans in transforms.items():
+        src, tgt = key.split('_')
+        pcd_dict[src].transform(trans)
+
+    overlapping_indices = find_overlapping_points(pcd_merged)
+
+    cropped_pcd_dict = {}
+    cropped_indices_dict = {}
+    for key, pcd in pcd_dict.items():
+        original_indices = get_original_indices(pcd_merged, pcd, overlapping_indices)
+        overlapping_points = np.asarray(pcd.points)[list(original_indices), :]
+        cropped_pcd = o3d.geometry.PointCloud()
+        cropped_pcd.points = o3d.utility.Vector3dVector(overlapping_points)
+        cropped_pcd_dict[key] = cropped_pcd
+        cropped_indices_dict[key] = list(original_indices)
+
+    cropped_scene_maps = {key: np.asarray(val.points) for key, val in cropped_pcd_dict.items()}
+    return cropped_scene_maps
