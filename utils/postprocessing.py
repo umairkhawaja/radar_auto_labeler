@@ -179,7 +179,7 @@ def create_filtered_indices(poses, reference_poses, threshold=0.1):
     return indices_to_keep
 
 
-def filter_maps_icp(scene_maps):
+def filter_maps_icp(scene_maps, alignment_thresh=0.5, overlapping_thresh=0.1):
     pcd_dict = {key: convert_to_open3d_pcd(val) for key, val in scene_maps.items()}
     pcd_merged = o3d.geometry.PointCloud()
     for pcd in pcd_dict.values():
@@ -190,13 +190,13 @@ def filter_maps_icp(scene_maps):
     for i in range(len(keys)):
         for j in range(i + 1, len(keys)):
             trans_key = f"{keys[i]}_{keys[j]}"
-            transforms[trans_key] = align_pointclouds(pcd_dict[keys[i]], pcd_dict[keys[j]])
+            transforms[trans_key] = align_pointclouds(pcd_dict[keys[i]], pcd_dict[keys[j]], threshold=alignment_thresh)
 
     for key, trans in transforms.items():
         src, tgt = key.split('_')
         pcd_dict[src].transform(trans)
 
-    overlapping_indices = find_overlapping_points(pcd_merged)
+    overlapping_indices = find_overlapping_points(pcd_merged, threshold=overlapping_thresh)
 
     cropped_pcd_dict = {}
     cropped_indices_dict = {}
