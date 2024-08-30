@@ -160,7 +160,7 @@ def process_scene(i, row):
     
 
     sps_labeler = AutoLabeler(
-        scene_maps=scene_maps, ref_map_id=list(scene_poses.keys())[0], scene_poses=scene_poses,
+        scene_maps=scene_maps, ref_map_id=ref_scene_name, scene_poses=scene_poses,
         scene_octomaps=scene_octomaps, lidar_labels=lidar_labels,
         dynamic_priors=scene_voxel_maps, use_octomaps=True,
         search_in_radius=SEARCH_IN_RADIUS, radius=RADIUS, use_combined_map=USE_COMBINED_MAP,
@@ -174,7 +174,8 @@ def process_scene(i, row):
         points = lmap[:, :3]
         stable_probs = lmap[:, -1]
 
-        dyn_points = dynamic_scene_maps[map_name]
+        dyn_points = np.hstack((dynamic_scene_maps[name][:,:3], np.zeros(len(dynamic_scene_maps[name])).astype(np.int).reshape(-1, 1)))
+
         points = np.vstack([points, dyn_points[:,:3]])
         stable_probs = np.hstack([stable_probs, dyn_points[:,-1]])
         combined_labelled_map = np.hstack([points, stable_probs.reshape(-1, 1)])
