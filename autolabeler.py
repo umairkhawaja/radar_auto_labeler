@@ -278,17 +278,22 @@ class AutoLabeler:
         plt.show()
 
     def plot_labeled_map_bev(self, map_id, size=1):
-        labeled_map = self.labelled_maps[map_id]
+        if type(map_id) == str:
+            labeled_map = self.labelled_maps[map_id]
+            center = self.map_centers[map_id]
+            radius = self.map_bounds_radius
+        else:
+            labeled_map = map_id
+        
         points = labeled_map[:, :3]
         labels = labeled_map[:, -1]
-        center = self.map_centers[map_id]
-        radius = self.map_bounds_radius
-        
+
+        mean_point = np.mean(points, axis=0) # Color rescaling fix
+        points = np.vstack([points, mean_point, mean_point + 1])
+        labels = np.hstack([labels, [0, 1]])
+
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
-        
-        plt.scatter([1], [1], c=[1], cmap='RdYlGn', s=size*0.05) # Just to adjust color scale
-        plt.scatter([0], [0], c=[0], cmap='RdYlGn', s=size*0.05)
 
         # circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
         # plt.gca().add_artist(circle)
@@ -301,11 +306,14 @@ class AutoLabeler:
     def plot_labeled_scan_bev(self, labeled_scan, size=1):
         points = labeled_scan[:, :3]
         labels = labeled_scan[:, -1]
+        
+        mean_point = np.mean(points, axis=0) # Color rescaling fix
+        points = np.vstack([points, mean_point, mean_point + 1])
+        labels = np.hstack([labels, [0, 1]])
+        
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
-
-        plt.scatter([1], [1], c=[1], cmap='RdYlGn', s=size*0.05) # Just to adjust color scale
-        plt.scatter([0], [0], c=[0], cmap='RdYlGn', s=size*0.05)
+        
         
         plt.colorbar(label='Stability')
         plt.xlabel('X')
@@ -313,17 +321,23 @@ class AutoLabeler:
         plt.title("Labeled scan and map")
 
     def save_bev_plot(self, map_id, save_path, title="Labelled Map Bird's Eye View", size=1):
-        labeled_map = self.labelled_maps[map_id]
+        if type(map_id) == str:
+            labeled_map = self.labelled_maps[map_id]
+            center = self.map_centers[map_id]
+            radius = self.map_bounds_radius
+        else:
+            labeled_map = map_id
+
         points = labeled_map[:, :2]
         labels = labeled_map[:, -1]
-        center = self.map_centers[map_id]
-        radius = self.map_bounds_radius
+
+        mean_point = np.mean(points, axis=0) # color rescaling fix
+        points = np.vstack([points, mean_point, mean_point + 1])
+        labels = np.hstack([labels, [0, 1]])
         
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
-        
-        plt.scatter([1], [1], c=[1], cmap='RdYlGn', s=size*0.05) # Just to adjust color scale
-        plt.scatter([0], [0], c=[0], cmap='RdYlGn', s=size*0.05)
+
         # circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
         # plt.gca().add_artist(circle)
         plt.colorbar(label='Stability')
