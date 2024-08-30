@@ -286,6 +286,10 @@ class AutoLabeler:
         
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
+        
+        plt.scatter([1], [1], c=[1], cmap='RdYlGn', s=size*0.05) # Just to adjust color scale
+        plt.scatter([0], [0], c=[0], cmap='RdYlGn', s=size*0.05)
+
         # circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
         # plt.gca().add_artist(circle)
         plt.colorbar(label='Stability')
@@ -299,6 +303,9 @@ class AutoLabeler:
         labels = labeled_scan[:, -1]
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
+
+        plt.scatter([1], [1], c=[1], cmap='RdYlGn', s=size*0.05) # Just to adjust color scale
+        plt.scatter([0], [0], c=[0], cmap='RdYlGn', s=size*0.05)
         
         plt.colorbar(label='Stability')
         plt.xlabel('X')
@@ -314,6 +321,9 @@ class AutoLabeler:
         
         plt.figure(figsize=(10, 10))
         plt.scatter(points[:, 0], points[:, 1], c=labels, cmap='RdYlGn', s=size)
+        
+        plt.scatter([1], [1], c=[1], cmap='RdYlGn', s=size*0.05) # Just to adjust color scale
+        plt.scatter([0], [0], c=[0], cmap='RdYlGn', s=size*0.05)
         # circle = plt.Circle((center[0], center[1]), radius, color='blue', fill=False, linewidth=2)
         # plt.gca().add_artist(circle)
         plt.colorbar(label='Stability')

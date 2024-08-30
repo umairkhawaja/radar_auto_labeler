@@ -12,7 +12,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from utils.labelling import get_sps_labels
 
 def plot_maps(scene_maps, poses, size=0.5, zoom_level=3):
-    plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(15, 15))
 
     colors = ['cyan', 'magenta', 'yellow', 'black', 'purple', 'brown']
     markers = ['o', 'v', 's', 'P', 'X', 'D']
@@ -51,7 +51,8 @@ def plot_maps(scene_maps, poses, size=0.5, zoom_level=3):
         plt.ylim(y_limits)
 
     plt.title("Overlapped Maps and Trajectories")
-    plt.legend()
+    if len(scene_maps) <= 3:
+        plt.legend()
     plt.grid(True)
     plt.show()
 
@@ -176,6 +177,9 @@ def map_pointcloud_to_image(nusc,
     points = points[:, mask]
     coloring = coloring[mask]
 
+    ## Add dummy points for fixing coloring scale
+    points = np.hstack([points, np.array([[1,1,1], [2,2,1]]).T])
+    coloring = np.hstack([coloring, np.array([0]), np.array([1])])
     return points, coloring, im
 
 def render_pointcloud_in_image(nusc,
