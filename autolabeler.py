@@ -239,8 +239,8 @@ class AutoLabeler:
             if closest_distance <= self.radius:
                 scan_labels.append(labeled_map_labels[closest_point_idx])
             else:
-                # scan_labels.append(np.inf)  # Assign stability score of inf if no correspondence within radius
-                scan_labels.append(0.5)  # Assign stability score of 0.5 if no correspondence within radius
+                scan_labels.append(0)  # Assign stability score of 0 if no correspondence within radius
+                # scan_labels.append(0.5)  # Assign stability score of 0.5 if no correspondence within radius
 
         scan_labels = np.array(scan_labels)
         labeled_scan = np.hstack((scan, scan_labels.reshape(-1, 1)))

@@ -48,18 +48,18 @@ VOXEL_SIZE = 0.01
 
 ICP_FILTERING = True
 SEARCH_IN_RADIUS = True
-RADIUS = 1
+RADIUS = 0.5
 USE_LIDAR_LABELS = False
 USE_OCCUPANCY_PRIORS = True
 FILTER_BY_POSES = False
 FILTER_BY_RADIUS = False
 FILTER_OUT_OF_BOUNDS = False
-USE_COMBINED_MAP = False
+USE_COMBINED_MAP = True
 
 
 SENSORS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
 
-OUTPUT_DIR = f'output_sw{NUM_SWEEPS}-dpr{DPR_THRESH}-r{RADIUS}'
+OUTPUT_DIR = f'output_sw{NUM_SWEEPS}-dpr{DPR_THRESH}-r{RADIUS}_combined_maps'
 OCTOMAP_DIR = osp.join(OUTPUT_DIR, 'octomaps')
 LABELS_DIR = osp.join(OUTPUT_DIR, 'labelled_maps')
 PLOTS_DIR = osp.join(OUTPUT_DIR, 'plots')
@@ -169,7 +169,7 @@ def process_scene(i, row):
 
     sps_labeler.label_maps()
         
-
+        
     for map_name, lmap in sps_labeler.labelled_maps.items():
         points = lmap[:, :3]
         stable_probs = lmap[:, -1]

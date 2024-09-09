@@ -25,9 +25,10 @@ plt.ioff()
 import concurrent.futures
 # from multiprocess.pool import Pool
 
-MAP_NAME = 'boston-seaport_sps_all_scenes'
+MAP_NAME = 'boston-seaport_sps_df_no_icp'
+# MAP_NAME = 'boston-seaport_sps'
 
-NUM_WORKERS = min(cpu_count(), 12)  # Adjust this number based on your machine's capabilities
+NUM_WORKERS = min(cpu_count(), 16)  # Adjust this number based on your machine's capabilities
 DF_PATH = '../sps_nuscenes_more_matches_df.json' # Sticking to this since odom/loc benchmarking was done on this to compare experiments
 sps_df = pd.read_json(DF_PATH)
 
@@ -51,15 +52,15 @@ DPR_THRESH = 0.15
 OCTOMAP_RESOLUTION = 0.15 # For dividing space, for lidar 0.1 is suitable but since radar is sparse a larger value might be better
 VOXEL_SIZE = 0.01
 
-ICP_FILTERING = True
+ICP_FILTERING = False
 SEARCH_IN_RADIUS = True
-RADIUS = 2
+RADIUS = 1
 USE_LIDAR_LABELS = False
 USE_OCCUPANCY_PRIORS = True
 FILTER_BY_POSES = False
 FILTER_BY_RADIUS = False
 FILTER_OUT_OF_BOUNDS = False
-USE_COMBINED_MAP = False
+USE_COMBINED_MAP = True
 
 
 SENSORS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
@@ -211,24 +212,8 @@ dataloaders = {}
 
 
 ## Running over shortlisted scenes df
-# with concurrent.futures.ThreadPoolExecutor() as executor:
-#     future_to_row = {executor.submit(process_row, row): i for i, row in sps_df.iterrows()}
-    
-#     for future in concurrent.futures.as_completed(future_to_row):
-#         i = future_to_row[future]
-#         pointclouds, scene_map, dynamic_scene_map, scene_pose, row_dls = future.result()
-#         # If using downsampled o3d pcl
-#         # scene_map = {name: np.asarray(o3d_map) for name, o3d_map in scene_map.items()}
-#         scene_pointclouds.update(pointclouds)
-#         scene_maps.update(scene_map)
-#         dynamic_scene_maps.update(dynamic_scene_map)
-#         scene_poses.update(scene_pose)
-#         dataloaders.update(row_dls)
-
-
-## Running over all 1000 scenes available
 with concurrent.futures.ThreadPoolExecutor() as executor:
-    future_to_row = {executor.submit(process_scene, scene): i for i, scene in enumerate(combined_scenes)}
+    future_to_row = {executor.submit(process_row, row): i for i, row in sps_df.iterrows()}
     
     for future in concurrent.futures.as_completed(future_to_row):
         i = future_to_row[future]
@@ -240,6 +225,22 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
         dynamic_scene_maps.update(dynamic_scene_map)
         scene_poses.update(scene_pose)
         dataloaders.update(row_dls)
+
+
+## Running over all 1000 scenes available
+# with concurrent.futures.ThreadPoolExecutor() as executor:
+#     future_to_row = {executor.submit(process_scene, scene): i for i, scene in enumerate(combined_scenes)}
+    
+#     for future in concurrent.futures.as_completed(future_to_row):
+#         i = future_to_row[future]
+#         pointclouds, scene_map, dynamic_scene_map, scene_pose, row_dls = future.result()
+#         # If using downsampled o3d pcl
+#         # scene_map = {name: np.asarray(o3d_map) for name, o3d_map in scene_map.items()}
+#         scene_pointclouds.update(pointclouds)
+#         scene_maps.update(scene_map)
+#         dynamic_scene_maps.update(dynamic_scene_map)
+#         scene_poses.update(scene_pose)
+#         dataloaders.update(row_dls)
 
 if FILTER_BY_POSES:
     scene_maps, scene_poses = create_filtered_maps(scene_poses, scene_pointclouds, threshold=1)
@@ -276,6 +277,7 @@ sps_labeler.label_maps()
 
 
 complete_sps_labelled_map = sps_labeler.labeled_environment_map
+np.save('complete_sps_labelled_map_no_icp_sps_df.npy', complete_sps_labelled_map)
 
 dynamic_sps_scene_points = {}
 for name in dynamic_scene_maps:

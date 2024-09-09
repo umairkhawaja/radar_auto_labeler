@@ -375,11 +375,11 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                 radar_pc = radar_pc.points
                 radar_points = np.zeros((9, radar_pc.shape[1]))
                 
-                radar_points[:3, :] = radar_pc[:3, :]
-                radar_points[3, :] = radar_pc[5, :]
-                radar_points[4, :] = radar_pc[4, :]
-                radar_points[5:7, :] = radar_pc[6:8, :]
-                radar_points[7:9, :] = radar_pc[8:10, :]
+                radar_points[:3, :] = radar_pc[:3, :] # x y z
+                radar_points[3, :] = radar_pc[5, :] # rcs
+                radar_points[4, :] = radar_pc[15, :] # pdh0: False alarm probability of cluster (i.e. probability of being an artefact caused by multipath or similar).
+                radar_points[5:7, :] = radar_pc[6:8, :] # v_x v_y
+                radar_points[7:9, :] = radar_pc[8:10, :] # cv_x cv_y
                 radar_points = radar_points.T
                 radar_points = np.hstack((radar_points, times.transpose()))
 
