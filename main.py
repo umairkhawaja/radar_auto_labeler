@@ -24,7 +24,7 @@ plt.ioff()
 
 
 NUM_WORKERS = min(cpu_count(), 4)  # Adjust this number based on your machine's capabilities
-DF_PATH = 'nuscenes_scenes_df.json' # Sticking to this since odom/loc benchmarking was done on this to compare experiments
+DF_PATH = 'sps_nuscenes_more_matches_df.json' # Sticking to this since odom/loc benchmarking was done on this to compare experiments
 sps_df = pd.read_json(DF_PATH)
 
 
@@ -48,7 +48,7 @@ VOXEL_SIZE = 0.01
 
 ICP_FILTERING = True
 SEARCH_IN_RADIUS = True
-RADIUS = 0.5
+RADIUS = 1
 USE_LIDAR_LABELS = False
 USE_OCCUPANCY_PRIORS = True
 FILTER_BY_POSES = False
@@ -59,7 +59,7 @@ USE_COMBINED_MAP = True
 
 SENSORS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
 
-OUTPUT_DIR = f'output_sw{NUM_SWEEPS}-dpr{DPR_THRESH}-r{RADIUS}_combined_maps'
+OUTPUT_DIR = f'output_sw{NUM_SWEEPS}-dpr{DPR_THRESH}-r{RADIUS}_more_matches'
 OCTOMAP_DIR = osp.join(OUTPUT_DIR, 'octomaps')
 LABELS_DIR = osp.join(OUTPUT_DIR, 'labelled_maps')
 PLOTS_DIR = osp.join(OUTPUT_DIR, 'plots')
