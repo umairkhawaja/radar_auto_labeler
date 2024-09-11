@@ -1,3 +1,6 @@
 output*
 inputs/
 __pycache__
+notebooks/output*
+notebooks/*.asc
+notebooks/*.jpg
