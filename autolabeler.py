@@ -138,9 +138,6 @@ class AutoLabeler:
             self.labelled_maps[map_id] = labeled_map
 
         self.labeled_environment_map = np.vstack([m for m in self.labelled_maps.values()])
-        if self.use_combined_map:
-            for map_id in self.labelled_maps:
-                self.labelled_maps[map_id] = self.labeled_environment_map
 
 
     def get_distance_to_closest_point(self, point, points, euclidean_weight=1, rcs_weight=0):
@@ -212,7 +209,7 @@ class AutoLabeler:
         return False
 
     def label_scan(self, scan, map_id=None):
-        if map_id is None:
+        if map_id is None or self.use_combined_map:
             print(f"Registering scan to combined environment map...")
             target_map = self.labeled_environment_map
         else:
