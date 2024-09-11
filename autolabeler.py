@@ -37,7 +37,7 @@ class AutoLabeler:
 
         if downsample:
             self.maps = {}
-            for name,map in scene_maps.items():
+            for name, map in scene_maps.items():
                 # Create an Open3D point cloud object
                 point_cloud = o3d.geometry.PointCloud()
                 point_cloud.points = o3d.utility.Vector3dVector(map[:, :3])
@@ -45,7 +45,19 @@ class AutoLabeler:
                 # Downsample the point cloud
                 ref_map_sampled = point_cloud.voxel_down_sample(voxel_size=voxel_size)
                 map_points = np.asarray(ref_map_sampled.points)
-                self.maps[name] = map_points
+                
+                # Find the indices of the downsampled points in the original point cloud
+                data  = point_cloud.voxel_down_sample_and_trace(voxel_size=voxel_size, min_bound=point_cloud.get_min_bound(), max_bound=point_cloud.get_max_bound())
+                print(data)
+                print(len(data))
+                assert(0)
+                # Retrieve corresponding features for the downsampled points
+                downsampled_features = map[indices, 3:]
+                
+                # Combine downsampled coordinates with their respective features
+                downsampled_map_with_features = np.hstack((map_points, downsampled_features))
+                
+                self.maps[name] = downsampled_map_with_features
 
         self.ref_map_id = ref_map_id
         self.maps_ids = list(self.maps.keys())
@@ -56,7 +68,7 @@ class AutoLabeler:
             for name in self.maps:
                 labels = self.lidar_labels[name]
                 radar_map = self.maps[name]
-                new_map = transfer_labels(labels, radar_map[:, :3])
+                new_map = transfer_labels(labels, radar_map)
                 self.lidar_labeled_scene_maps[name] = new_map
         
         self.map_centers = {name: np.mean(map[:,:3], axis=0) for name,map in self.maps.items()}

@@ -84,7 +84,7 @@ def process_scene(i, row):
         apply_dpr=False,
         filter_points=FILTER_POINTS,
         ransac_threshold=-1,
-        reformat_pcl=False
+        combine_velocity_components=False
 
     )}
 
@@ -100,7 +100,7 @@ def process_scene(i, row):
             apply_dpr=False,
             filter_points=FILTER_POINTS,
             ransac_threshold=-1,
-            reformat_pcl=False
+            combine_velocity_components=False
 
         )
 
@@ -171,14 +171,17 @@ def process_scene(i, row):
         
         
     for map_name, lmap in sps_labeler.labelled_maps.items():
-        points = lmap[:, :3]
-        stable_probs = lmap[:, -1]
+        # points = lmap[:, :3]
+        # stable_probs = lmap[:, -1]
 
-        dyn_points = np.hstack((dynamic_scene_maps[name][:,:3], np.zeros(len(dynamic_scene_maps[name])).astype(np.int).reshape(-1, 1)))
+        # dyn_points = np.hstack((dynamic_scene_maps[name][:,:3], np.zeros(len(dynamic_scene_maps[name])).astype(np.int).reshape(-1, 1)))
+        dyn_points = np.hstack((dynamic_scene_maps[name], np.zeros(len(dynamic_scene_maps[name])).astype(np.int).reshape(-1, 1)))
 
-        points = np.vstack([points, dyn_points[:,:3]])
-        stable_probs = np.hstack([stable_probs, dyn_points[:,-1]])
-        combined_labelled_map = np.hstack([points, stable_probs.reshape(-1, 1)])
+        # points = np.vstack([points, dyn_points[:,:3]])
+        # stable_probs = np.hstack([stable_probs, dyn_points[:,-1]])
+        # combined_labelled_map = np.hstack([points, stable_probs.reshape(-1, 1)])
+
+        combined_labelled_map = np.vstack([lmap, dyn_points])
 
         save_path = osp.join(PLOTS_DIR, 'labeled_maps')
         Path(save_path).mkdir(parents=True, exist_ok=True)
@@ -187,9 +190,11 @@ def process_scene(i, row):
 
         filename = f"{LABELS_DIR}/{map_name}.asc"
         np.savetxt(filename,
-                   np.hstack([points, stable_probs.reshape(-1, 1)]),
+                #    np.hstack([points, stable_probs.reshape(-1, 1)]),
+                   combined_labelled_map,
                    fmt='%.6f', delimiter=' ',
-                   header='x y z stable_prob',
+                #    header='x y z stable_prob',
+                   header='x y z RCS v_x v_y cv_x cv_y stable_prob',
                    comments='')
 
 if __name__ == '__main__':

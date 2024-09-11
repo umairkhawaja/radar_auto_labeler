@@ -50,10 +50,10 @@ class RANSACSolver:
         return best_mask, best_alpha_pre, best_vs_pre
 
     def ransac_nusc(self, pcl, vis=False, info=None):
-        v = (pcl[:, 5]**2 + pcl[:, 6]**2)**0.5                     # target's absolute velocity in radar frame
-        v_comp = (pcl[:, 7]**2 + pcl[:, 8]**2)**0.5                                      # target's absolute velocity in global frame
+        v = (pcl[:, 4]**2 + pcl[:, 5]**2)**0.5                     # target's absolute velocity in radar frame
+        v_comp = (pcl[:, 6]**2 + pcl[:, 7]**2)**0.5                                      # target's absolute velocity in global frame
         theta = np.arctan(pcl[:, 1] / (pcl[:, 0] + 1e-5))          # azimuth
-        theta_v = np.arctan(pcl[:, 6] / (pcl[:, 5] + 1e-5))
+        theta_v = np.arctan(pcl[:, 5] / (pcl[:, 4] + 1e-5))
         theta_r = theta - theta_v
         v_r = v * np.cos(theta_r)                                  # doppler range velocity
         low_sp_r = np.sum(np.abs(v_r) < 1) / v_r.shape[0]

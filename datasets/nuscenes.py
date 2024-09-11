@@ -76,7 +76,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                  ref_sensor='LIDAR_TOP',
                  ref_frame=None,
                  measure_range = 100,
-                 reformat_pcl = True,
+                 combine_velocity_components = False,
                  nusc_version: str = "v1.0-mini",
                  annotated_keyframes: bool = False, *_, **__):
         """
@@ -114,7 +114,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
             self.sps_thresh = -1
 
         self.min_distance = 1.0 # For Multi-sweep reading
-        self.reformat_pcl = reformat_pcl
+        self.combine_velocity_components = combine_velocity_components
 
         
         if annotated_keyframes:
@@ -172,27 +172,27 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
         if self.ref_frame == self.ref_sensor and self.ref_frame is not None:
             # Just return the reference sensor pcd
             points = pcd[self.ref_sensor]
-            if self.reformat_pcl:
+            if self.combine_velocity_components:
                 pointcloud_reformatted = np.zeros((len(points), 6))
                 pointcloud_reformatted[:, :3] = points[:, :3] # x y z
                 pointcloud_reformatted[:, 3] = points[:, 3] # rcs
-                pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
-                pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                pointcloud_reformatted[:, 4]   = self.doppler_v(points, 4, 5) # doppler_shift
+                pointcloud_reformatted[:, 5]   = self.doppler_v(points, 6, 7) # compensated velocities doppler shift
             else:
-                pointcloud_reformatted = points
+                pointcloud_reformatted = points # x y z RCS v_x v_y cv_x cv_y
             parsed_points = [pointcloud_reformatted.astype(np.float64)]
         elif self.ref_frame is None:
             # Output each pointcloud in its own sensor frame
             for sensor in self.sensors:
                 points = pcd[sensor]
-                if self.reformat_pcl:
+                if self.combine_velocity_components:
                     pointcloud_reformatted = np.zeros((len(points), 6))
                     pointcloud_reformatted[:, :3] = points[:, :3] # x y z
                     pointcloud_reformatted[:, 3] = points[:, 3] # rcs
-                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
-                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 4, 5) # doppler_shift
+                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 6, 7) # compensated velocities doppler shift
                 else:
-                    pointcloud_reformatted = points
+                    pointcloud_reformatted = points # x y z RCS v_x v_y cv_x cv_y
                 pointclouds.append(pointcloud_reformatted.astype(np.float64))
             parsed_points = pointclouds
         
@@ -200,28 +200,28 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
             # Transform pointcloud to the ego vehicle frame for each sensor and stack them
             for sensor, car_from_sensor in zip(self.sensors, calibs):
                 points = pcd[sensor]
-                if self.reformat_pcl:
+                if self.combine_velocity_components:
                     pointcloud_reformatted = np.zeros((len(points), 6))
                     pointcloud_reformatted[:, :3] = points[:, :3] # x y z
                     pointcloud_reformatted[:, 3] = points[:, 3] # rcs
-                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
-                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 4, 5) # doppler_shift
+                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 6, 7) # compensated velocities doppler shift
                 else:
-                    pointcloud_reformatted = points
+                    pointcloud_reformatted = points # x y z RCS v_x v_y cv_x cv_y
                 ego_points = transform_doppler_points(car_from_sensor, pointcloud_reformatted.astype(np.float64))
                 pointclouds.append(ego_points)
             parsed_points = np.vstack(pointclouds)
         elif self.ref_frame == 'global':
             for sensor, car_from_sensor in zip(self.sensors, calibs):
                 points = pcd[sensor]
-                if self.reformat_pcl:
+                if self.combine_velocity_components:
                     pointcloud_reformatted = np.zeros((len(points), 6))
                     pointcloud_reformatted[:, :3] = points[:, :3] # x y z
                     pointcloud_reformatted[:, 3] = points[:, 3] # rcs
-                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 5, 6) # doppler_shift
-                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 7, 8) # compensated velocities doppler shift
+                    pointcloud_reformatted[:, 4]   = self.doppler_v(points, 4, 5) # doppler_shift
+                    pointcloud_reformatted[:, 5]   = self.doppler_v(points, 6, 7) # compensated velocities doppler shift
                 else:
-                    pointcloud_reformatted = points
+                    pointcloud_reformatted = points # x y z RCS v_x v_y cv_x cv_y
                 ego_points = transform_doppler_points(car_from_sensor, pointcloud_reformatted.astype(np.float64))
                 global_points = transform_doppler_points(global_from_car, ego_points)
                 pointclouds.append(global_points)
@@ -299,7 +299,7 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
         def process_sweeps(start_index, n_sweeps):
             current_frame = {}
             sensor_ids = []
-            pcd_dict = {sensor: np.zeros((0, 10)) for sensor in self.channels}  # Dictionary to store point clouds for each sensor
+            pcd_dict = {sensor: np.zeros((0, 9)) for sensor in self.channels}  # Dictionary to store point clouds for each sensor
 
             for sensor in self.channels:
                 points = np.zeros((RadarPointCloud.nbr_dims(), 0))
@@ -373,20 +373,20 @@ class NuScenesMultipleRadarMultiSweeps(NuScenesDataloader):
                 ## Filter points
                 # radar_pc = self.filter_static_reliable_points(radar_pc.points)
                 radar_pc = radar_pc.points
-                radar_points = np.zeros((9, radar_pc.shape[1]))
+                radar_points = np.zeros((8, radar_pc.shape[1]))
                 
                 radar_points[:3, :] = radar_pc[:3, :] # x y z
                 radar_points[3, :] = radar_pc[5, :] # rcs
-                radar_points[4, :] = radar_pc[15, :] # pdh0: False alarm probability of cluster (i.e. probability of being an artefact caused by multipath or similar).
-                radar_points[5:7, :] = radar_pc[6:8, :] # v_x v_y
-                radar_points[7:9, :] = radar_pc[8:10, :] # cv_x cv_y
+                # radar_points[4, :] = radar_pc[15, :] # pdh0: False alarm probability of cluster (i.e. probability of being an artefact caused by multipath or similar).
+                radar_points[4:6, :] = radar_pc[6:8, :] # v_x v_y
+                radar_points[6:8, :] = radar_pc[8:10, :] # cv_x cv_y
                 radar_points = radar_points.T
                 radar_points = np.hstack((radar_points, times.transpose()))
 
                 if self.apply_dpr and radar_points.shape[0] > 1:
                     nbr_flag = np.cumsum(nbr_points)
                     pcl_list = np.split(radar_points, nbr_flag, axis=0)
-                    pcls_new = np.zeros((0, 10))
+                    pcls_new = np.zeros((0, 9))
                     for index, pcl in enumerate(pcl_list[:-1]):
                         if pcl.shape[0] > 1:
                             info = [
