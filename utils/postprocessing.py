@@ -202,11 +202,10 @@ def filter_maps_icp(scene_maps, alignment_thresh=0.5, overlapping_thresh=0.1):
     cropped_indices_dict = {}
     for key, pcd in pcd_dict.items():
         original_indices = get_original_indices(pcd_merged, pcd, overlapping_indices)
-        overlapping_points = np.asarray(pcd.points)[list(original_indices), :]
-        cropped_pcd = o3d.geometry.PointCloud()
-        cropped_pcd.points = o3d.utility.Vector3dVector(overlapping_points)
-        cropped_pcd_dict[key] = cropped_pcd
+        # overlapping_points = np.asarray(pcd.points)[list(original_indices), :]
+        overlapping_points = scene_maps[key][list(original_indices)]
+        cropped_pcd_dict[key] = overlapping_points
         cropped_indices_dict[key] = list(original_indices)
 
-    cropped_scene_maps = {key: np.asarray(val.points) for key, val in cropped_pcd_dict.items()}
+    cropped_scene_maps = {key: val for key, val in cropped_pcd_dict.items()}
     return cropped_scene_maps

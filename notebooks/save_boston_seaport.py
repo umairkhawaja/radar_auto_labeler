@@ -25,10 +25,7 @@ plt.ioff()
 import concurrent.futures
 # from multiprocess.pool import Pool
 
-MAP_NAME = 'boston-seaport_sps_df_no_icp'
-# MAP_NAME = 'boston-seaport_sps'
-
-NUM_WORKERS = min(cpu_count(), 16)  # Adjust this number based on your machine's capabilities
+NUM_WORKERS = min(cpu_count(), 4)  # Adjust this number based on your machine's capabilities
 DF_PATH = '../sps_nuscenes_more_matches_df.json' # Sticking to this since odom/loc benchmarking was done on this to compare experiments
 sps_df = pd.read_json(DF_PATH)
 
@@ -61,6 +58,10 @@ FILTER_BY_POSES = False
 FILTER_BY_RADIUS = False
 FILTER_OUT_OF_BOUNDS = False
 USE_COMBINED_MAP = True
+USE_N_MAP_CORRESPONDENCES = 1 # 100
+
+MAP_NAME = 'boston-seaport_sps_df_1correspondence'
+# MAP_NAME = 'boston-seaport_sps'
 
 
 SENSORS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
@@ -93,7 +94,10 @@ def process_row(row):
         reformat_pcl=False
     )}
 
-    for matched_scene, data in closest_scenes.items():
+    for i, (matched_scene, data) in enumerate(closest_scenes.items()):
+        if i+1 > USE_N_MAP_CORRESPONDENCES: # use only N sequence correspondences
+            break
+
         row_dls[matched_scene] = NuScenesMultipleRadarMultiSweeps(
             data_dir=DATA_DIR,
             nusc=nuscenes_exp[data['split']],

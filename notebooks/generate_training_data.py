@@ -22,7 +22,7 @@ apply_dpr = False
 filter_points = False
 dpr_thresh = 0.75
 data_dir = "/shared/data/nuScenes/"
-EXP_NAME = 'output_sw5-dpr0.15-r1_combined_maps_more_matches'
+EXP_NAME = 'output_sw5-dpr0.15-r1_more_matches'
 BASE_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes'
 
 if os.path.exists(BASE_DIR):
@@ -34,14 +34,14 @@ dst_maps_dir = os.path.join(BASE_DIR, "maps")
 shutil.copytree(src_maps_dir, dst_maps_dir)
 sps_maps_dir = f"../{EXP_NAME}/labelled_maps/"
 
-for i,row in sps_df.iterrows():
-    ref_scene_name = row['scene_name']
-    closest_scenes = row['closest_scenes']
-    src_path = os.path.join(dst_maps_dir, f'{ref_scene_name}.asc')
+# for i,row in sps_df.iterrows():
+#     ref_scene_name = row['scene_name']
+#     closest_scenes = row['closest_scenes']
+#     src_path = os.path.join(dst_maps_dir, f'{ref_scene_name}.asc')
     
-    for scene in closest_scenes:
-        dst_path = os.path.join(dst_maps_dir, f'{scene}.asc')
-        shutil.copyfile(src_path, dst_path)
+#     for scene in closest_scenes:
+#         dst_path = os.path.join(dst_maps_dir, f'{scene}.asc')
+#         shutil.copyfile(src_path, dst_path)
 
 
 sensors = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
@@ -175,3 +175,4 @@ def process_all_scenes(df, num_workers=4):
 
 if __name__ == "__main__":
     all_data = process_all_scenes(sps_df, num_workers=8)
+    # all_data = process_all_scenes(sps_df[sps_df['scene_name'] == 'scene-0162'], num_workers=1)
