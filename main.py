@@ -175,7 +175,7 @@ def process_scene(i, row):
         # stable_probs = lmap[:, -1]
 
         # dyn_points = np.hstack((dynamic_scene_maps[name][:,:3], np.zeros(len(dynamic_scene_maps[name])).astype(np.int).reshape(-1, 1)))
-        dyn_points = np.hstack((dynamic_scene_maps[name], np.zeros(len(dynamic_scene_maps[name])).astype(np.int).reshape(-1, 1)))
+        dyn_points = np.hstack((dynamic_scene_maps[name], np.ones(len(dynamic_scene_maps[name])).astype(np.int).reshape(-1, 1)))
 
         # points = np.vstack([points, dyn_points[:,:3]])
         # stable_probs = np.hstack([stable_probs, dyn_points[:,-1]])

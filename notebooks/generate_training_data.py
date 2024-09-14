@@ -10,6 +10,7 @@ from utils.transforms import *
 import os
 import shutil
 import numpy as np  # Added missing numpy import
+from utils.motion_estimation import remove_dynamic_points
 
 # Load the DataFrame
 sps_df = pd.read_json('../sps_nuscenes_more_matches_df.json')
@@ -20,7 +21,7 @@ num_sweeps = 5
 ref_sensor = None
 apply_dpr = False
 filter_points = False
-dpr_thresh = 0.75
+dpr_thresh = -1
 data_dir = "/shared/data/nuScenes/"
 EXP_NAME = 'output_sw5-dpr0.15-r1_more_matches'
 BASE_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes'
@@ -174,5 +175,5 @@ def process_all_scenes(df, num_workers=4):
     return results
 
 if __name__ == "__main__":
-    all_data = process_all_scenes(sps_df, num_workers=8)
+    all_data = process_all_scenes(sps_df, num_workers=16)
     # all_data = process_all_scenes(sps_df[sps_df['scene_name'] == 'scene-0162'], num_workers=1)
