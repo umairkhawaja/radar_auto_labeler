@@ -23,8 +23,8 @@ apply_dpr = False
 filter_points = False
 dpr_thresh = -1
 data_dir = "/shared/data/nuScenes/"
-EXP_NAME = 'output_sw5-dpr0.15-r1_more_matches'
-BASE_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes'
+EXP_NAME = 'output_sw5-dpr0.15-r1_more_matches_no_icp'
+BASE_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes_noicp'
 
 if os.path.exists(BASE_DIR):
     shutil.rmtree(BASE_DIR)
