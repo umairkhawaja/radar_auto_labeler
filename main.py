@@ -42,7 +42,7 @@ FILTER_POINTS = False
 
 NUM_SWEEPS = 5
 APPLY_DPR = True
-DPR_THRESH = 0.15
+DPR_THRESH = 0.5 # 0.15
 OCTOMAP_RESOLUTION = 0.15 # For dividing space, for lidar 0.1 is suitable but since radar is sparse a larger value might be better
 VOXEL_SIZE = 0.01
 
