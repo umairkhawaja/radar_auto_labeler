@@ -1,10 +1,19 @@
 from tqdm import tqdm
 import octomap
+import os
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 from utils.transforms import *
 from scipy.spatial import KDTree
+from pathos.multiprocessing import ProcessingPool as Pool
+
+NUM_WORKERS=16
+# Move the worker function outside of the class and define it at the module level
+def label_map_worker(args):
+    auto_labeler, map_id = args
+    return auto_labeler.process_map(map_id)
+
 
 class AutoLabeler:
     def __init__(self,
@@ -21,7 +30,8 @@ class AutoLabeler:
                  fallback_map_radius=100,
                  filter_out_of_bounds=False,
                  use_combined_map=False,
-                 voxel_size=0.5):
+                 voxel_size=0.5,
+                 tmp_dir='tmp_labelled_maps'):
         
         self.use_octomaps = use_octomaps
         self.maps = scene_maps
@@ -35,6 +45,8 @@ class AutoLabeler:
         self.occluded_point = -1
         self.filter_out_of_bounds = filter_out_of_bounds
         self.use_combined_map = use_combined_map
+        self.tmp_dir = tmp_dir
+
 
         if downsample:
             self.maps = {}
@@ -76,6 +88,34 @@ class AutoLabeler:
         self.map_centers = {name: np.mean(map[:,:3], axis=0) for name,map in self.maps.items()}
         self.map_bounds_radius = self.calculate_map_bounds_radius(buffer=25)
 
+    def __getstate__(self):
+        # Copy the object's state excluding unpickleable objects
+        state = self.__dict__.copy()
+        # Remove unpickleable entries
+        if 'octomaps' in state:
+            del state['octomaps']
+        return state
+
+    def __setstate__(self, state):
+        # Restore the object's state
+        self.__dict__.update(state)
+        # Re-initialize octomaps in the worker process
+        self.octomaps = self._load_octomaps()
+
+    def _load_octomaps(self):
+        # Load or reconstruct the octomaps as needed
+        # This method should recreate self.octomaps
+        # For example, load octomaps from files or reconstruct them
+        octomaps = {}
+        for map_id in self.maps_ids:
+            # Replace this with the actual code to load your octomap
+            octomap_file = f'path_to_octomap_files/{map_id}.bt'
+            if os.path.exists(octomap_file):
+                octree = octomap.OcTree()
+                octree.readBinary(octomap_file)
+                octomaps[map_id] = octree
+        return octomaps
+
     def adjust_stability_scores(self, labeled_map, map_id):
         center = self.map_centers[map_id]
         radius = self.map_bounds_radius
@@ -98,61 +138,88 @@ class AutoLabeler:
         return max_distance
 
     def label_maps(self):
-        for map_id, ref_map in self.maps.items():
-            max_features = []
-            print(f"Extracting features for {map_id}...")
+        # Ensure tmp_dir exists
+        os.makedirs(self.tmp_dir, exist_ok=True)
 
-            for point in tqdm(ref_map):
-                # Check if the point is within the map bounds radius
-                # if np.linalg.norm(point[:3] - self.map_centers[map_id]) > self.map_bounds_radius[map_id]:
-                #     max_features.append(0.5)  # Assign stability score of 0.5 if outside bounds
-                #     continue
+        # Build list of map_ids to process
+        map_ids_to_process = []
+        for map_id in self.maps:
+            tmp_file_path = os.path.join(self.tmp_dir, f'{map_id}_labelled.npy')
+            if os.path.exists(tmp_file_path):
+                # Load the labeled map
+                labeled_map = np.load(tmp_file_path)
+                self.labelled_maps[map_id] = labeled_map
+            else:
+                map_ids_to_process.append(map_id)
 
-                dis = []
-                for query_map in self.maps_ids:
-                    if query_map == map_id or len(self.maps[query_map]) < 1:
-                        continue
-                    occluded = self.is_point_occluded(point, query_map) if self.use_octomaps else False
-                    if not occluded:
-                        if self.search_in_radius:
-                            d_radius = self.get_points_within_radius(point, self.maps[query_map], radius=self.radius)
-                            dis.extend(d_radius)
-                        else:
-                            d = self.get_distance_to_closest_point(point, self.maps[query_map])
-                            dis.append(d)
-                    else:
-                        dis.append(self.occluded_point)
-                
-                if len(dis):
-                    max_dis = max(dis)
-                else:
-                    max_dis = np.inf # No correspondence found
+        # Prepare arguments for worker function
+        args_list = [(self, map_id) for map_id in map_ids_to_process]
 
-                if max_dis != self.occluded_point:
-                    max_dis = 1 - np.exp(-max_dis * (max_dis / 100))
-            
-                max_features.append(max_dis)
+        # Use pathos Pool
+        with Pool(processes=NUM_WORKERS) as pool:
+            results = pool.map(label_map_worker, args_list)
 
-            labeled_map = np.hstack((ref_map, np.array(max_features).reshape(-1, 1)))
-            labeled_map[:, -1] = 1 - labeled_map[:, -1]  # Using 1 for stability
-
-            if self.lidar_labels is not None:
-                labeled_map[:, -1] = labeled_map[:, -1] * self.lidar_labeled_scene_maps[map_id][:, -1]  # combine lidar proxy labels
-            
-            if self.dynamic_priors:
-                voxel_hash_map = self.dynamic_priors[map_id]
-                scan_dynamic_scores = voxel_hash_map.assign_scores_to_pointcloud(labeled_map[:, :3])
-                labeled_map[:, -1] *= scan_dynamic_scores[:, -1]
-
-            labeled_map[:, -1] = np.clip(labeled_map[:, -1], 0, 1)
-
-            if self.filter_out_of_bounds:
-                labeled_map = self.adjust_stability_scores(labeled_map, map_id)
-
+        # Update self.labelled_maps with the results
+        for map_id, labeled_map in results:
             self.labelled_maps[map_id] = labeled_map
 
+        # Build labeled_environment_map
         self.labeled_environment_map = np.vstack([m for m in self.labelled_maps.values()])
 
+    def process_map(self, map_id):
+        import os
+        # This function processes a single map and returns the labeled map
+        tmp_file_path = os.path.join(self.tmp_dir, f'{map_id}_labelled.npy')
+        ref_map = self.maps[map_id]
+        max_features = []
+        print(f"Extracting features for {map_id}...")
+
+        for point in tqdm(ref_map):
+            dis = []
+            for query_map in self.maps_ids:
+                if query_map == map_id or len(self.maps[query_map]) < 1:
+                    continue
+                occluded = self.is_point_occluded(point, query_map) if self.use_octomaps else False
+                if not occluded:
+                    if self.search_in_radius:
+                        d_radius = self.get_points_within_radius(point, self.maps[query_map], radius=self.radius)
+                        dis.extend(d_radius)
+                    else:
+                        d = self.get_distance_to_closest_point(point, self.maps[query_map])
+                        dis.append(d)
+                else:
+                    dis.append(self.occluded_point)
+
+            if len(dis):
+                max_dis = max(dis)
+            else:
+                max_dis = np.inf  # No correspondence found
+
+            if max_dis != self.occluded_point:
+                max_dis = 1 - np.exp(-max_dis * (max_dis / 100))
+
+            max_features.append(max_dis)
+
+        labeled_map = np.hstack((ref_map, np.array(max_features).reshape(-1, 1)))
+        labeled_map[:, -1] = 1 - labeled_map[:, -1]  # Using 1 for stability
+
+        if self.lidar_labels is not None:
+            labeled_map[:, -1] = labeled_map[:, -1] * self.lidar_labeled_scene_maps[map_id][:, -1]  # combine lidar proxy labels
+
+        if self.dynamic_priors:
+            voxel_hash_map = self.dynamic_priors[map_id]
+            scan_dynamic_scores = voxel_hash_map.assign_scores_to_pointcloud(labeled_map[:, :3])
+            labeled_map[:, -1] *= scan_dynamic_scores[:, -1]
+
+        labeled_map[:, -1] = np.clip(labeled_map[:, -1], 0, 1)
+
+        if self.filter_out_of_bounds:
+            labeled_map = self.adjust_stability_scores(labeled_map, map_id)
+
+        # Save labeled_map to tmp_dir
+        np.save(tmp_file_path, labeled_map)
+
+        return (map_id, labeled_map)
 
     def get_distance_to_closest_point(self, point, points, euclidean_weight=1, rcs_weight=0):
         # Extract the RCS value of the point
