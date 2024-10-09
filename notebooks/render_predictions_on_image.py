@@ -38,20 +38,21 @@ RIT_THRESHOLD = 0.5
 # Experiment Names
 SPS_EXP_NAMES = [
     # 'Nuscenes-ICPMaps-NoAugs-NoRadarFeatures',
-    'Nuscenes-ICPMaps-NoAugs-RadarFeatures',
+    # 'Nuscenes-ICPMaps-NoAugs-RadarFeatures',
     # 'Nuscenes-ICPMaps-Augs-RadarFeatures',
-    'Nuscenes-MapsDPR-NoAugs-RadarFeatures',
-    'Nuscenes-MapsDPR-NoAugs-RadarFeatures-DPRScans',
+    # 'Nuscenes-MapsDPR-NoAugs-RadarFeatures',
+    # 'Nuscenes-MapsDPR-NoAugs-RadarFeatures-DPRScans',
 ]
 
 RIT_EXP_NAMES = [
     # 'tversky-nosubmaps-noaugs',
     # 'tversky-nosubmaps-augs',
-    'ce-nosubmaps-noaugs',
+    # 'ce-nosubmaps-noaugs',
     # 'ce-nosubmaps-augs',
     'ce-dprsubmaps-noaugs',
     'ce-dprsubmaps-noaugs-dprscans',
-    'tversky-dprsubmaps-noaugs-dprscans',
+    'mse-dprsubmaps-noaugs-dprscans',
+    # 'tversky-dprsubmaps-noaugs-dprscans',
 ]
 
 # Test Scenes
@@ -222,11 +223,11 @@ def parse_sps_predictions(dataset_dir, predictions_dir, scene_name, update_pose=
 # Update Point Cloud Pose
 def update_pointcloud_pose(pointcloud, from_pose, to_pose):
     transformation = to_pose @ np.linalg.inv(from_pose)
-    num_points = pointcloud.shape[0]
+    NP = pointcloud.shape[0]
     xyz = pointcloud[:, :3]
-    labels = pointcloud[:, 3].reshape(num_points, 1)
-    xyz_homogeneous = np.hstack([xyz, np.ones((num_points, 1))]).T
-    transformed_xyz = (transformation @ xyz_homogeneous).T[:, :3]
+    labels = pointcloud[:, 3:6].reshape(NP, -1)
+    xyz1 = np.hstack([xyz, np.ones((NP, 1))]).T
+    transformed_xyz = (transformation @ xyz1).T[:, :3]
     transformed_point_clouds = np.hstack([transformed_xyz, labels])
     return transformed_point_clouds
 

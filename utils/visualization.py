@@ -12,6 +12,8 @@ from pyquaternion import Quaternion
 from nuscenes.utils.geometry_utils import view_points, transform_matrix
 from matplotlib.colors import LinearSegmentedColormap
 from utils.labelling import get_sps_labels
+from utils.motion_estimation import RANSACSolver
+
 
 def plot_maps(scene_maps, poses, size=0.5, zoom_level=3):
     plt.figure(figsize=(15, 15))
@@ -102,6 +104,184 @@ def plot_voxel_map(voxel_hash_map, voxel_size):
     plot_voxel_hash_map_open3d(normalized_scores, voxel_hash_map, voxel_size)
 
 
+# def map_pointcloud_to_image(nusc,
+#                             sps_map,
+#                             pointsensor_token: str,
+#                             camera_token: str,
+#                             min_dist: float = 1.0):
+#     """
+#     Given a point sensor (lidar/radar) token and camera sample_data token, load pointcloud and map it to the image
+#     plane.
+#     :param pointsensor_token: Lidar/radar sample_data token.
+#     :param camera_token: Camera sample_data token.
+#     :param min_dist: Distance from the camera below which points are discarded.
+#     :param render_intensity: Whether to render lidar intensity instead of point depth.
+#     :param show_lidarseg: Whether to render lidar intensity instead of point depth.
+#     :param filter_lidarseg_labels: Only show lidar points which belong to the given list of classes. If None
+#         or the list is empty, all classes will be displayed.
+#     :param lidarseg_preds_bin_path: A path to the .bin file which contains the user's lidar segmentation
+#                                     predictions for the sample.
+#     :param show_panoptic: When set to True, the lidar data is colored with the panoptic labels. When set
+#         to False, the colors of the lidar data represent the distance from the center of the ego vehicle.
+#         If show_lidarseg is True, show_panoptic will be set to False.
+#     :return (pointcloud <np.float: 2, n)>, coloring <np.float: n>, image <Image>).
+#     """
+#     ransac_solver = RANSACSolver(threshold=0.15, max_iter=10, outdir='output_dpr')
+
+#     cam = nusc.get('sample_data', camera_token)
+#     pointsensor = nusc.get('sample_data', pointsensor_token)
+
+#     pcl_path = osp.join(nusc.dataroot, pointsensor['filename'])
+#     pc = RadarPointCloud.from_file(pcl_path)
+#     im = Image.open(osp.join(nusc.dataroot, cam['filename']))
+
+#     ransac_input_pcl = pc.points.T
+#     info = [
+#         ['', -1],
+#         'RADAR',
+#         ransac_input_pcl.shape[0]
+#     ]
+#     best_mask, _, _ = ransac_solver.ransac_nusc(info=info, pcl=ransac_input_pcl, vis=False)
+    
+
+#     # Points live in the point sensor frame. So they need to be transformed via global to the image plane.
+#     # First step: transform the pointcloud to the ego vehicle frame for the timestamp of the sweep.
+#     cs_record = nusc.get('calibrated_sensor', pointsensor['calibrated_sensor_token'])
+#     pc.rotate(Quaternion(cs_record['rotation']).rotation_matrix)
+#     pc.translate(np.array(cs_record['translation']))
+
+
+#     # Second step: transform from ego to the global frame.
+#     poserecord = nusc.get('ego_pose', pointsensor['ego_pose_token'])
+#     pc.rotate(Quaternion(poserecord['rotation']).rotation_matrix)
+#     pc.translate(np.array(poserecord['translation']))
+
+#     global_points = pc.points.T
+#     static_global_points = global_points[best_mask]
+#     dpr_global_points = global_points[~best_mask]
+
+#     sps_score = get_sps_labels(sps_map, static_global_points)
+
+#     # Third step: transform from global into the ego vehicle frame for the timestamp of the image.
+#     poserecord = nusc.get('ego_pose', cam['ego_pose_token'])
+#     pc.translate(-np.array(poserecord['translation']))
+#     pc.rotate(Quaternion(poserecord['rotation']).rotation_matrix.T)
+    
+#     # Fourth step: transform from ego into the camera.
+#     cs_record = nusc.get('calibrated_sensor', cam['calibrated_sensor_token'])
+#     pc.translate(-np.array(cs_record['translation']))
+#     pc.rotate(Quaternion(cs_record['rotation']).rotation_matrix.T)
+
+
+#     # Fifth step: actually take a "picture" of the point cloud.
+#     # Grab the depths (camera frame z axis points away from the camera).
+#     depths = pc.points[2, :]
+#     coloring = sps_score
+
+#     # Take the actual picture (matrix multiplication with camera-matrix + renormalization).
+#     points = view_points(pc.points[:3, :], np.array(cs_record['camera_intrinsic']), normalize=True)
+
+#     # Remove points that are either outside or behind the camera. Leave a margin of 1 pixel for aesthetic reasons.
+#     # Also make sure points are at least 1m in front of the camera to avoid seeing the lidar points on the camera
+#     # casing for non-keyframes which are slightly out of sync.
+#     mask = np.ones(depths.shape[0], dtype=bool)
+#     mask = np.logical_and(mask, depths > min_dist)
+#     mask = np.logical_and(mask, points[0, :] > 1)
+#     mask = np.logical_and(mask, points[0, :] < im.size[0] - 1)
+#     mask = np.logical_and(mask, points[1, :] > 1)
+#     mask = np.logical_and(mask, points[1, :] < im.size[1] - 1)
+#     points = points[:, mask]
+#     coloring = coloring[mask]
+
+#     ## Add dummy points for fixing coloring scale
+#     points = np.hstack([points, np.array([[1,1,1], [2,2,1]]).T])
+#     coloring = np.hstack([coloring, np.array([0]), np.array([1])])
+#     return points, coloring, im
+
+# def render_pointcloud_in_image(nusc,
+#                                sps_map,
+#                                 sample_token: str,
+#                                 dot_size: int = 5,
+#                                 pointsensor_channel: str = 'LIDAR_TOP',
+#                                 camera_channel: str = 'CAM_FRONT',
+#                                 out_path: str = None,
+#                                 ax = None,
+#                                 verbose: bool = True):
+#     """
+#     Scatter-plots a pointcloud on top of image.
+#     :param sample_token: Sample token.
+#     :param dot_size: Scatter plot dot size.
+#     :param pointsensor_channel: RADAR or LIDAR channel name, e.g. 'LIDAR_TOP'.
+#     :param camera_channel: Camera channel name, e.g. 'CAM_FRONT'.
+#     :param out_path: Optional path to save the rendered figure to disk.
+#     :param render_intensity: Whether to render lidar intensity instead of point depth.
+#     :param show_lidarseg: Whether to render lidarseg labels instead of point depth.
+#     :param filter_lidarseg_labels: Only show lidar points which belong to the given list of classes.
+#     :param ax: Axes onto which to render.
+#     :param show_lidarseg_legend: Whether to display the legend for the lidarseg labels in the frame.
+#     :param verbose: Whether to display the image in a window.
+#     :param lidarseg_preds_bin_path: A path to the .bin file which contains the user's lidar segmentation
+#                                     predictions for the sample.
+#     :param show_panoptic: When set to True, the lidar data is colored with the panoptic labels. When set
+#         to False, the colors of the lidar data represent the distance from the center of the ego vehicle.
+#         If show_lidarseg is True, show_panoptic will be set to False.
+#     """
+#     from mpl_toolkits.axes_grid1 import make_axes_locatable
+    
+#     sample_record = nusc.get('sample', sample_token)
+
+
+#     # Here we just grab the front camera and the point sensor.
+#     pointsensor_token = nusc.get('sample_data', sample_record['data'][pointsensor_channel])['token'] # sample_record['data'][pointsensor_channel]
+#     camera_token = nusc.get('sample_data', sample_record['data'][camera_channel])['token'] # sample_record['data'][camera_channel]
+
+#     points, coloring, im = map_pointcloud_to_image(nusc, sps_map, pointsensor_token, camera_token)
+
+#     ## Enforce colouring
+#         # Define the custom colormap
+#     cdict = {
+#         'red':   ((0.0, 1.0, 1.0),
+#                   (0.5, 1.0, 1.0),
+#                   (1.0, 0.0, 0.0)),
+
+#         'green': ((0.0, 0.0, 0.0),
+#                   (0.5, 1.0, 1.0),
+#                   (1.0, 1.0, 1.0)),
+
+#         'blue':  ((0.0, 0.0, 0.0),
+#                   (0.5, 0.0, 0.0),
+#                   (1.0, 0.0, 0.0))
+#     }
+#     gyr_cmap = LinearSegmentedColormap('GYR', cdict)
+
+#     # Normalize the coloring array to [0, 1]
+#     norm = plt.Normalize(vmin=0, vmax=1)
+#     coloring_normalized = norm(coloring)
+
+#     # Apply the colormap to the normalized coloring array
+#     coloring_rgb = gyr_cmap(coloring_normalized)
+
+#     # Init axes.
+#     if ax is None:
+#         fig, ax = plt.subplots(1, 1, figsize=(9, 16))
+#         fig.canvas.set_window_title(sample_token)
+#     else:  # Set title on if rendering as part of render_sample.
+#         ax.set_title(camera_channel)
+#     ax.imshow(im)
+#     scatter = ax.scatter(points[0, :], points[1, :], c=coloring, s=dot_size, cmap='RdYlGn')
+#     divider = make_axes_locatable(ax)
+#     cax = divider.append_axes("right", size="5%", pad=0.05)
+
+#     ax.axis('off')
+#     cbar = plt.colorbar(scatter, cax=cax)
+#     cbar.set_label("Stability (Max: 1)")
+
+#     if out_path is not None:
+#         plt.savefig(out_path, bbox_inches='tight', pad_inches=0, dpi=200)
+#     if verbose:
+#         plt.show()
+
+
 def map_pointcloud_to_image(nusc,
                             sps_map,
                             pointsensor_token: str,
@@ -110,20 +290,14 @@ def map_pointcloud_to_image(nusc,
     """
     Given a point sensor (lidar/radar) token and camera sample_data token, load pointcloud and map it to the image
     plane.
-    :param pointsensor_token: Lidar/radar sample_data token.
-    :param camera_token: Camera sample_data token.
-    :param min_dist: Distance from the camera below which points are discarded.
-    :param render_intensity: Whether to render lidar intensity instead of point depth.
-    :param show_lidarseg: Whether to render lidar intensity instead of point depth.
-    :param filter_lidarseg_labels: Only show lidar points which belong to the given list of classes. If None
-        or the list is empty, all classes will be displayed.
-    :param lidarseg_preds_bin_path: A path to the .bin file which contains the user's lidar segmentation
-                                    predictions for the sample.
-    :param show_panoptic: When set to True, the lidar data is colored with the panoptic labels. When set
-        to False, the colors of the lidar data represent the distance from the center of the ego vehicle.
-        If show_lidarseg is True, show_panoptic will be set to False.
-    :return (pointcloud <np.float: 2, n)>, coloring <np.float: n>, image <Image>).
+
+    Returns:
+        points_static (np.ndarray): Projected image points for static points.
+        coloring_static (np.ndarray): SPS scores for static points.
+        points_dynamic (np.ndarray): Projected image points for dynamic points.
+        im (Image): The camera image.
     """
+    ransac_solver = RANSACSolver(threshold=0.15, max_iter=10, outdir='output_dpr')
 
     cam = nusc.get('sample_data', camera_token)
     pointsensor = nusc.get('sample_data', pointsensor_token)
@@ -131,7 +305,14 @@ def map_pointcloud_to_image(nusc,
     pcl_path = osp.join(nusc.dataroot, pointsensor['filename'])
     pc = RadarPointCloud.from_file(pcl_path)
     im = Image.open(osp.join(nusc.dataroot, cam['filename']))
-    
+
+    ransac_input_pcl = pc.points.T
+    info = [
+        ['', -1],
+        'RADAR',
+        ransac_input_pcl.shape[0]
+    ]
+    best_mask, _, _ = ransac_solver.ransac_nusc(info=info, pcl=ransac_input_pcl, vis=False)
 
     # Points live in the point sensor frame. So they need to be transformed via global to the image plane.
     # First step: transform the pointcloud to the ego vehicle frame for the timestamp of the sweep.
@@ -139,128 +320,149 @@ def map_pointcloud_to_image(nusc,
     pc.rotate(Quaternion(cs_record['rotation']).rotation_matrix)
     pc.translate(np.array(cs_record['translation']))
 
-
     # Second step: transform from ego to the global frame.
     poserecord = nusc.get('ego_pose', pointsensor['ego_pose_token'])
     pc.rotate(Quaternion(poserecord['rotation']).rotation_matrix)
     pc.translate(np.array(poserecord['translation']))
 
-    global_points = pc.points.T
-    sps_score = get_sps_labels(sps_map, global_points)
+    # Extract global points and create an index array for all points.
+    global_points = pc.points.T  # Shape (N_points, 4)
+    N_points = global_points.shape[0]
+    total_points_indices = np.arange(N_points)
+
+    # Extract static global points for computing SPS scores.
+    static_global_points = global_points[best_mask]
+    sps_score = get_sps_labels(sps_map, static_global_points)
+
+    # Create an array of SPS scores aligned with all points.
+    sps_scores_full = np.zeros(N_points)
+    sps_scores_full[best_mask] = sps_score
 
     # Third step: transform from global into the ego vehicle frame for the timestamp of the image.
     poserecord = nusc.get('ego_pose', cam['ego_pose_token'])
     pc.translate(-np.array(poserecord['translation']))
     pc.rotate(Quaternion(poserecord['rotation']).rotation_matrix.T)
-    
+
     # Fourth step: transform from ego into the camera.
     cs_record = nusc.get('calibrated_sensor', cam['calibrated_sensor_token'])
     pc.translate(-np.array(cs_record['translation']))
     pc.rotate(Quaternion(cs_record['rotation']).rotation_matrix.T)
 
-
-    # Fifth step: actually take a "picture" of the point cloud.
-    # Grab the depths (camera frame z axis points away from the camera).
-    depths = pc.points[2, :]
-    coloring = sps_score
-
-    # Take the actual picture (matrix multiplication with camera-matrix + renormalization).
+    # Fifth step: project the point cloud onto the image plane.
+    depths = pc.points[2, :]  # Length N_points
     points = view_points(pc.points[:3, :], np.array(cs_record['camera_intrinsic']), normalize=True)
 
-    # Remove points that are either outside or behind the camera. Leave a margin of 1 pixel for aesthetic reasons.
-    # Also make sure points are at least 1m in front of the camera to avoid seeing the lidar points on the camera
-    # casing for non-keyframes which are slightly out of sync.
+    # Create a mask to filter out points outside the image.
     mask = np.ones(depths.shape[0], dtype=bool)
     mask = np.logical_and(mask, depths > min_dist)
     mask = np.logical_and(mask, points[0, :] > 1)
     mask = np.logical_and(mask, points[0, :] < im.size[0] - 1)
     mask = np.logical_and(mask, points[1, :] > 1)
     mask = np.logical_and(mask, points[1, :] < im.size[1] - 1)
-    points = points[:, mask]
-    coloring = coloring[mask]
 
-    ## Add dummy points for fixing coloring scale
-    points = np.hstack([points, np.array([[1,1,1], [2,2,1]]).T])
-    coloring = np.hstack([coloring, np.array([0]), np.array([1])])
-    return points, coloring, im
+    # Apply the mask to points, best_mask, and sps_scores_full.
+    points = points[:, mask]
+    best_mask = best_mask[mask]
+    sps_scores_full = sps_scores_full[mask]
+
+    # Separate static and dynamic points.
+    static_indices = np.where(best_mask)[0]
+    dynamic_indices = np.where(~best_mask)[0]
+
+    points_static = points[:, static_indices]
+    points_dynamic = points[:, dynamic_indices]
+    coloring_static = sps_scores_full[static_indices]
+
+    return points_static, coloring_static, points_dynamic, im
+
+
 
 def render_pointcloud_in_image(nusc,
                                sps_map,
-                                sample_token: str,
-                                dot_size: int = 5,
-                                pointsensor_channel: str = 'LIDAR_TOP',
-                                camera_channel: str = 'CAM_FRONT',
-                                out_path: str = None,
-                                ax = None,
-                                verbose: bool = True):
+                               sample_token: str,
+                               dot_size: int = 5,
+                               pointsensor_channel: str = 'LIDAR_TOP',
+                               camera_channel: str = 'CAM_FRONT',
+                               out_path: str = None,
+                               ax=None,
+                               verbose: bool = True):
     """
-    Scatter-plots a pointcloud on top of image.
-    :param sample_token: Sample token.
-    :param dot_size: Scatter plot dot size.
-    :param pointsensor_channel: RADAR or LIDAR channel name, e.g. 'LIDAR_TOP'.
-    :param camera_channel: Camera channel name, e.g. 'CAM_FRONT'.
-    :param out_path: Optional path to save the rendered figure to disk.
-    :param render_intensity: Whether to render lidar intensity instead of point depth.
-    :param show_lidarseg: Whether to render lidarseg labels instead of point depth.
-    :param filter_lidarseg_labels: Only show lidar points which belong to the given list of classes.
-    :param ax: Axes onto which to render.
-    :param show_lidarseg_legend: Whether to display the legend for the lidarseg labels in the frame.
-    :param verbose: Whether to display the image in a window.
-    :param lidarseg_preds_bin_path: A path to the .bin file which contains the user's lidar segmentation
-                                    predictions for the sample.
-    :param show_panoptic: When set to True, the lidar data is colored with the panoptic labels. When set
-        to False, the colors of the lidar data represent the distance from the center of the ego vehicle.
-        If show_lidarseg is True, show_panoptic will be set to False.
+    Scatter-plots a pointcloud on top of an image, with static points colored by SPS scores and dynamic points
+    as blue crosses.
+
+    Args:
+        nusc: NuScenes dataset object.
+        sps_map: Stability scores map.
+        sample_token: Sample token.
+        dot_size: Scatter plot dot size.
+        pointsensor_channel: RADAR or LIDAR channel name, e.g. 'LIDAR_TOP'.
+        camera_channel: Camera channel name, e.g. 'CAM_FRONT'.
+        out_path: Optional path to save the rendered figure to disk.
+        ax: Axes onto which to render.
+        verbose: Whether to display the image in a window.
+
+    Returns:
+        None
     """
     from mpl_toolkits.axes_grid1 import make_axes_locatable
-    
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LinearSegmentedColormap
+
     sample_record = nusc.get('sample', sample_token)
 
+    # Get the sensor and camera tokens.
+    pointsensor_token = nusc.get('sample_data', sample_record['data'][pointsensor_channel])['token']
+    camera_token = nusc.get('sample_data', sample_record['data'][camera_channel])['token']
 
-    # Here we just grab the front camera and the point sensor.
-    pointsensor_token = nusc.get('sample_data', sample_record['data'][pointsensor_channel])['token'] # sample_record['data'][pointsensor_channel]
-    camera_token = nusc.get('sample_data', sample_record['data'][camera_channel])['token'] # sample_record['data'][camera_channel]
+    # Get the points and image using the updated map_pointcloud_to_image function.
+    points_static, coloring_static, points_dynamic, im = map_pointcloud_to_image(
+        nusc, sps_map, pointsensor_token, camera_token
+    )
 
-    points, coloring, im = map_pointcloud_to_image(nusc, sps_map, pointsensor_token, camera_token)
-
-    ## Enforce colouring
-        # Define the custom colormap
+    # Define the custom colormap.
     cdict = {
         'red':   ((0.0, 1.0, 1.0),
                   (0.5, 1.0, 1.0),
                   (1.0, 0.0, 0.0)),
-
         'green': ((0.0, 0.0, 0.0),
                   (0.5, 1.0, 1.0),
                   (1.0, 1.0, 1.0)),
-
         'blue':  ((0.0, 0.0, 0.0),
                   (0.5, 0.0, 0.0),
                   (1.0, 0.0, 0.0))
     }
     gyr_cmap = LinearSegmentedColormap('GYR', cdict)
 
-    # Normalize the coloring array to [0, 1]
+    # Normalize the coloring array to [0, 1].
     norm = plt.Normalize(vmin=0, vmax=1)
-    coloring_normalized = norm(coloring)
+    coloring_normalized = norm(coloring_static)
 
-    # Apply the colormap to the normalized coloring array
+    # Apply the colormap to the normalized coloring array.
     coloring_rgb = gyr_cmap(coloring_normalized)
 
-    # Init axes.
+    # Initialize axes.
     if ax is None:
         fig, ax = plt.subplots(1, 1, figsize=(9, 16))
         fig.canvas.set_window_title(sample_token)
-    else:  # Set title on if rendering as part of render_sample.
+    else:
         ax.set_title(camera_channel)
     ax.imshow(im)
-    scatter = ax.scatter(points[0, :], points[1, :], c=coloring, s=dot_size, cmap='RdYlGn')
+
+    # Plot static points with coloring.
+    scatter = ax.scatter(points_static[0, :], points_static[1, :],
+                         c=coloring_static, s=dot_size, cmap=gyr_cmap)
+
+    # Plot dynamic points as blue crosses.
+    ax.scatter(points_dynamic[0, :], points_dynamic[1, :],
+               c='blue', marker='x', s=dot_size)
+
+    # Create colorbar for static points.
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.05)
-
-    ax.axis('off')
     cbar = plt.colorbar(scatter, cax=cax)
     cbar.set_label("Stability (Max: 1)")
+
+    ax.axis('off')
 
     if out_path is not None:
         plt.savefig(out_path, bbox_inches='tight', pad_inches=0, dpi=200)
