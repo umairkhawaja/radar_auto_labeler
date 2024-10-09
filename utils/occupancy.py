@@ -9,24 +9,40 @@ from utils.transforms import transform_doppler_points
 
 def build_octomap(dl, resolution=0.1):
     # Initialize the OctoMap with the specified resolution
-    poses = dl.global_poses
-    num_readings = dl.num_readings
     octree = octomap.OcTree(resolution)
 
+    if isinstance(dl, dict):
+        poses = dl['poses']
+        num_readings = dl['num_readings']
+        point_clouds_data = dl['point_clouds']
+        calibs_data = dl['calibs']
+        for i in tqdm(range(num_readings)):
+            pointclouds = point_clouds_data[i]
+            calibs = calibs_data[i]
+            pose = poses[i]
 
-    for i in tqdm(range(num_readings)):
-        pointclouds = dl[i][0]
-        calibs = dl[i][1]
-        pose = poses[i]
+            if type(pointclouds) == list:
+                for pointcloud, calib in zip(pointclouds, calibs):
+                    ego_pointcloud = transform_doppler_points(calib, pointcloud)
+                    global_pointcloud = transform_doppler_points(pose, ego_pointcloud)
 
-        if type(pointclouds) == list:
-            for pointcloud, calib in zip(pointclouds, calibs):
-                ego_pointcloud = transform_doppler_points(calib, pointcloud)
-                global_pointcloud = transform_doppler_points(pose, ego_pointcloud)
+                    sensor_origin = pose[:3, 3]
+                    octree.insertPointCloud(global_pointcloud, sensor_origin)
+    else:
+        poses = dl.global_poses
+        num_readings = dl.num_readings
+        for i in tqdm(range(num_readings)):
+            pointclouds = dl[i][0]
+            calibs = dl[i][1]
+            pose = poses[i]
 
-                sensor_origin = pose[:3, 3]
-                octree.insertPointCloud(global_pointcloud, sensor_origin)
+            if type(pointclouds) == list:
+                for pointcloud, calib in zip(pointclouds, calibs):
+                    ego_pointcloud = transform_doppler_points(calib, pointcloud)
+                    global_pointcloud = transform_doppler_points(pose, ego_pointcloud)
 
+                    sensor_origin = pose[:3, 3]
+                    octree.insertPointCloud(global_pointcloud, sensor_origin)
     return octree
 
 

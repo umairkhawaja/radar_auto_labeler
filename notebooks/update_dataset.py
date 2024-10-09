@@ -20,7 +20,8 @@ DATA_DIR = "/shared/data/nuScenes/"
 versions = {'trainval': 'v1.0-trainval', 'test': 'v1.0-test'}
 nuscenes_exp = {vname: NuScenes(dataroot=DATA_DIR, version=version, verbose=False) for vname, version in versions.items()}
 
-LABELLED_MAPS_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes/maps/'
+LABELLED_MAPS_DIR = '/home/umair/workspace/radar_auto_labeler/notebooks/boston-seaport_sps_df_1correspondence.asc'
+# LABELLED_MAPS_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes/maps/'
 DPR_MAPS_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes/maps_dpr/'
 LOCAL_DPR_MAPS_DIR = '/home/umair/workspace/radar_sps_datasets/nuscenes/local_maps_dpr/'
 [Path(d).mkdir(exist_ok=True, parents=True) for d in [DPR_MAPS_DIR, LOCAL_DPR_MAPS_DIR]]
@@ -145,7 +146,10 @@ def get_updated_data(scene_name, dataloader, labelled_map):
 
 def process_scene(scene_name, split):
     try:
-        old_labelled_map = np.loadtxt(os.path.join(LABELLED_MAPS_DIR, scene_name + ".asc"), skiprows=1)
+        if LABELLED_MAPS_DIR.endswith("asc"):
+            old_labelled_map = np.loadtxt(LABELLED_MAPS_DIR, skiprows=1)
+        else:
+            old_labelled_map = np.loadtxt(os.path.join(LABELLED_MAPS_DIR, scene_name + ".asc"), skiprows=1)
         seq = int(scene_name.split("-")[-1])
 
         dataloader = NuScenesMultipleRadarMultiSweeps(
@@ -177,7 +181,7 @@ def process_scene(scene_name, split):
 
         scans_dir = f'/home/umair/workspace/radar_sps_datasets/nuscenes/sequence/{scene_name}/scans/'
         scans_dpr_dir = f'/home/umair/workspace/radar_sps_datasets/nuscenes/sequence/{scene_name}/scans_dpr/'
-        labels_dpr_dir = f'/home/umair/workspace/radar_sps_datasets/nuscenes/sequence/{scene_name}/labels_dpr/'
+        labels_dpr_dir = f'/home/umair/workspace/radar_sps_datasets/nuscenes/sequence/{scene_name}/combinedmap_labels_dpr/'
 
         [Path(p).mkdir(parents=True, exist_ok=True) for p in [scans_dpr_dir, labels_dpr_dir]]
         

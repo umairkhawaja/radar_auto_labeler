@@ -91,6 +91,10 @@ def get_sps_labels(map, scan_points):
     for point in scan_points[:, :3]:
         distances = np.linalg.norm(labeled_map_points - point, axis=1)
         closest_point_idx = np.argmin(distances)
-        sps_labels.append(labeled_map_labels[closest_point_idx])
+        if distances[closest_point_idx] < 1:
+            sps_labels.append(labeled_map_labels[closest_point_idx])
+        else:
+            sps_labels.append(0)
+
     sps_labels = np.array(sps_labels)
     return sps_labels
