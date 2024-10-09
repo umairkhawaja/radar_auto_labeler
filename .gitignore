@@ -4,3 +4,8 @@ __pycache__
 notebooks/output*
 notebooks/*.asc
 notebooks/*.jpg
+notebooks/tmp_labelled_maps
+notebooks/checkpoints
+notebooks/global*
+notebooks/octomap*
+tmp_labelled_maps/
