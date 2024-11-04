@@ -76,26 +76,32 @@ class RANSACSolver:
             plt.rcParams['figure.figsize'] = (10, 10)
             plt.rcParams['figure.dpi'] = 150
             fig, ax = plt.subplots(2, 2)
-            ax[1][0].scatter(np.rad2deg(theta), v_r, s=4, label='range velocity')
+            if low_sp_r > 0.5:
+                mask = abs(v_r) <= 1
+                # Plot inliers
+                ax[1][0].scatter(np.rad2deg(theta[mask]), v_r[mask], s=4, label='inliers')
+                # Plot outliers in red
+                ax[1][0].scatter(np.rad2deg(theta[~mask]), v_r[~mask], s=4, c='r', label='outliers')
+                ax[1][0].plot([np.min(np.rad2deg(theta)), np.max(np.rad2deg(theta))], [1, 1], c='green', lw=0.5)
+            else:
+                # Plot inliers
+                ax[1][0].scatter(np.rad2deg(theta[best_mask]), v_r[best_mask], s=4, label='inliers')
+                # Plot outliers in red
+                ax[1][0].scatter(np.rad2deg(theta[~best_mask]), v_r[~best_mask], s=4, c='r', label='outliers')
+                theta_ = np.arange(-np.pi / 2, np.pi / 2, 0.1)
+                ax[1][0].plot(np.rad2deg(theta_), best_vs_pre * np.cos(best_alpha_pre - theta_), label='estimated profile', color='green', lw=0.5)
+                ax[1][0].fill_between(np.rad2deg(theta_),
+                                    best_vs_pre * np.cos(best_alpha_pre - theta_) + self.threshold * best_vs_pre,
+                                    best_vs_pre * np.cos(best_alpha_pre - theta_) - self.threshold * best_vs_pre,
+                                    color='green',
+                                    alpha=0.15)
+
             ax[1][0].grid('on', lw=0.2)
             ax[1][0].set_xlim([-90, 90])
             ax[1][0].set_ylim([0, 30])
             ax[1][0].set_title('o_r1:{}/{}={:.2f} low_sp_r:{:.2f}'.format(pcl.shape[0] - np.sum(best_mask), pcl.shape[0], 1 - np.sum(best_mask) / pcl.shape[0], low_sp_r))
             ax[1][0].set_xlabel('azimuth(degree)')
             ax[1][0].set_ylabel('range velocity(m/s)')
-            if low_sp_r > 0.5:
-                ax[1][0].plot([np.min(np.rad2deg(theta)), np.max(np.rad2deg(theta))], [1, 1], c='green', lw=0.5)
-                for ind in range(pcl.shape[0]):
-                    if abs(v_r[ind]) > 1:
-                        ax[1][0].scatter(np.rad2deg(theta[ind]), v_r[ind], s=1, c='r')
-            else:
-                theta_ = np.arange(-np.pi / 2, np.pi / 2, 0.1)
-                ax[1][0].plot(np.rad2deg(theta_), best_vs_pre * np.cos(best_alpha_pre - theta_), label='estimated profile', color='green', lw=0.5)
-                ax[1][0].fill_between(np.rad2deg(theta_),
-                                      best_vs_pre * np.cos(best_alpha_pre - theta_) + self.threshold * best_vs_pre,
-                                      best_vs_pre * np.cos(best_alpha_pre - theta_) - self.threshold * best_vs_pre,
-                                      color='green',
-                                      alpha=0.15)
             # --------------------------------------------- plot4 -------------------------------------------- #
             ax[1][1].scatter(np.rad2deg(theta), v, s=4, label='v = sqrt(vx^2+vy^2)')
             ax[1][1].scatter(np.rad2deg(theta), v_comp, s=4, label='v_comp(compensated by ego-motion)')
@@ -117,7 +123,7 @@ class RANSACSolver:
             v_amp = 1.0                                                                    # to make velocity arrow more visbile
             ax[0][0].scatter(pcl[:, 0], pcl[:, 1], s=1)
             for ind in range(pcl.shape[0]):
-                ax[0][0].arrow(pcl[ind, 0], pcl[ind, 1], v_amp * pcl[ind, 6], v_amp * pcl[ind, 7], linewidth=0.5, head_width=1, fc='black', ec='r')
+                ax[0][0].arrow(pcl[ind, 0], pcl[ind, 1], v_amp * pcl[ind, 5], v_amp * pcl[ind, 6], linewidth=0.5, head_width=1, fc='black', ec='r')
 
             ax[0][0].axis("square")
             # ax[0][0].set_xlim(X_LIMIT)
@@ -130,7 +136,7 @@ class RANSACSolver:
             # --------------------------------------------- plot2 -------------------------------------------- #
             ax[0][1].scatter(pcl[:, 0], pcl[:, 1], s=1)
             for ind in range(pcl.shape[0]):
-                ax[0][1].arrow(pcl[ind, 0], pcl[ind, 1], v_amp * pcl[ind, 8], v_amp * pcl[ind, 9], linewidth=0.5, head_width=1, fc='black', ec='r')
+                ax[0][1].arrow(pcl[ind, 0], pcl[ind, 1], v_amp * pcl[ind, 7], v_amp * pcl[ind, 8], linewidth=0.5, head_width=1, fc='black', ec='r')
             ax[0][1].axis("square")
             # ax[0][1].set_xlim(X_LIMIT)
             # ax[0][1].set_ylim(Y_LIMIT)

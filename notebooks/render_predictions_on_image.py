@@ -51,8 +51,15 @@ RIT_EXP_NAMES = [
     # 'ce-nosubmaps-augs',
     'ce-dprsubmaps-noaugs',
     'ce-dprsubmaps-noaugs-dprscans',
-    'mse-dprsubmaps-noaugs-dprscans',
+    # 'mse-dprsubmaps-noaugs-dprscans',
     # 'tversky-dprsubmaps-noaugs-dprscans',
+    'ce-dprmaps-noaugs-dprscans-npast5',
+    'ce-dprmaps-noaugs-dprscans-npast10',
+    'ce-nomaps-noaugs-dprscans-npast5',
+    'ce-nomaps-noaugs-dprscans-npast10',
+    'ce-dprmaps-augs-dprscans-npast3',
+    'ce-dprmaps@R0.5-noaugs-dprscans-npast3',
+    'ce-dprmaps@R1-noaugs-dprscans-npast3',
 ]
 
 # Test Scenes

@@ -297,7 +297,7 @@ def map_pointcloud_to_image(nusc,
         points_dynamic (np.ndarray): Projected image points for dynamic points.
         im (Image): The camera image.
     """
-    ransac_solver = RANSACSolver(threshold=0.15, max_iter=10, outdir='output_dpr')
+    ransac_solver = RANSACSolver(threshold=0.5, max_iter=10, outdir='output_dpr')
 
     cam = nusc.get('sample_data', camera_token)
     pointsensor = nusc.get('sample_data', pointsensor_token)
@@ -372,6 +372,10 @@ def map_pointcloud_to_image(nusc,
     points_static = points[:, static_indices]
     points_dynamic = points[:, dynamic_indices]
     coloring_static = sps_scores_full[static_indices]
+
+    #     ## Add dummy points for fixing coloring scale
+    points_static = np.hstack([points_static, np.array([[1,1,1], [2,2,1]]).T])
+    coloring_static = np.hstack([coloring_static, np.array([0]), np.array([1])])
 
     return points_static, coloring_static, points_dynamic, im
 

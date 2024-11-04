@@ -166,6 +166,45 @@ class AutoLabeler:
         # Build labeled_environment_map
         self.labeled_environment_map = np.vstack([m for m in self.labelled_maps.values()])
 
+    def apply_median_filter(self, labelled_map, k=5):
+        from sklearn.neighbors import NearestNeighbors
+        """
+        Applies a Median Filter on the labels of a labelled point cloud map.
+
+        Parameters:
+        - labelled_map: np.ndarray of shape (N, 4), where the first 3 columns are
+                        3D coordinates (x, y, z) and the 4th column contains the labels.
+        - k: int, the number of nearest neighbors to consider for the median filter (default: 5)
+
+        Returns:
+        - filtered_map: np.ndarray of shape (N, 4), the map with smoothed labels.
+        """
+        # Extract 3D coordinates and labels
+        points = labelled_map[:, :3]
+        labels = labelled_map[:, -1]
+        
+        # Initialize Nearest Neighbors search
+        nbrs = NearestNeighbors(n_neighbors=k, algorithm='ball_tree').fit(points)
+        
+        # Find k-nearest neighbors for each point
+        _, indices = nbrs.kneighbors(points)
+        
+        # Create a copy of the labelled_map to store the filtered labels
+        filtered_map = np.copy(labelled_map)
+        
+        # Apply median filtering on the labels
+        for i in range(len(labels)):
+            # Get the labels of the k-nearest neighbors
+            neighbor_labels = labels[indices[i]]
+            
+            # Compute the median of the neighbor labels
+            filtered_label = np.median(neighbor_labels)
+            
+            # Update the filtered label in the new map
+            filtered_map[i, 3] = filtered_label
+        
+        return filtered_map
+
     def process_map(self, map_id):
         import os
         # This function processes a single map and returns the labeled map
@@ -201,6 +240,7 @@ class AutoLabeler:
             max_features.append(max_dis)
 
         labeled_map = np.hstack((ref_map, np.array(max_features).reshape(-1, 1)))
+        labeled_map = self.apply_median_filter(labeled_map)
         labeled_map[:, -1] = 1 - labeled_map[:, -1]  # Using 1 for stability
 
         if self.lidar_labels is not None:

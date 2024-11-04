@@ -8,7 +8,7 @@ from utils.labelling import *
 from utils.transforms import *
 from utils.postprocessing import *
 from utils.ransac_solver import RANSACSolver
-from utils.motion_estimation import *
+from utils.motion_estimation import remove_dynamic_points
 from autolabeler import AutoLabeler
 import pandas as pd
 import os
@@ -17,21 +17,18 @@ import numpy as np
 import open3d as o3d
 from pathlib import Path
 from nuscenes import NuScenes
-from multiprocessing import cpu_count, set_start_method
+from multiprocessing import cpu_count
 import matplotlib
 import matplotlib.pyplot as plt
 from utils.visualization import map_pointcloud_to_image, render_pointcloud_in_image, plot_maps
-from utils.motion_estimation import remove_dynamic_points
 matplotlib.use('Agg')
 plt.ioff()
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import pickle
-
-# Set the multiprocessing start method
-set_start_method("spawn", force=True)
+import octomap  # Ensure that the octomap Python bindings are installed
 
 # Adjust this number based on your machine's capabilities
-NUM_WORKERS = min(cpu_count(), 4)
+NUM_WORKERS = min(cpu_count(), 32)
 
 # Paths and configuration
 DF_PATH = '../sps_nuscenes_more_matches_df.json'
@@ -71,25 +68,27 @@ MAP_NAME = 'boston-seaport_sps_df_1correspondence'
 SENSORS = ["RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT"]
 
 # Ensure checkpoint directories exist
-os.makedirs('tmp_labelled_maps', exist_ok=True)  # Ensure the directory exists
+os.makedirs('tmp_labelled_maps', exist_ok=True)
 os.makedirs('checkpoints/scene_scans_voxel_maps', exist_ok=True)
 os.makedirs('octomap_tmp', exist_ok=True)
+os.makedirs('processed_scene_data', exist_ok=True)  # Directory to save processed scene data
 
-# Define a function for processing each row with checkpointing
+
+# Modify process_row to only process and save scene data without labeling
 def process_row(row):
     ref_scene_name = row['scene_name']
     ref_split = row['split']
-    # Updated check: A scene is marked fully processed if its map can be found in tmp_labelled_maps dir
-    labelled_map_file = f'tmp_labelled_maps/{ref_scene_name}_labelled_map.npy'
 
     # Check if this scene has already been processed
-    if os.path.exists(labelled_map_file):
+    scene_data_file = f'processed_scene_data/{ref_scene_name}_data.pkl'
+    if os.path.exists(scene_data_file):
         print(f"Skipping {ref_scene_name}, already processed.")
         return ref_scene_name  # Return the scene name to indicate completion
 
     try:
         closest_scenes = row['closest_scenes_data']
 
+        # Initialize data loaders for the reference scene and its closest scenes
         row_dls = {ref_scene_name: NuScenesMultipleRadarMultiSweeps(
             data_dir=DATA_DIR,
             nusc=nuscenes_exp[ref_split],
@@ -144,11 +143,8 @@ def process_row(row):
             static_scene_maps[name] = filtered_map_pcl
             dynamic_scene_maps[name] = map_pcl[~indices]
 
+        # Filtering dynamic scene maps using ICP (if implemented)
         dynamic_scene_maps = filter_maps_icp(dynamic_scene_maps, alignment_thresh=0.5, overlapping_thresh=0.25)
-
-        # Proceed to generate scene scans, voxel maps, and octomaps in parallel
-        # Save necessary data for parallel processing
-        # We'll use per-scene checkpointing to avoid reprocessing
 
         # Process scene scans and voxel maps
         dataloader_lengths = {name: len(dl) for name, dl in row_dls.items()}
@@ -158,8 +154,9 @@ def process_row(row):
             args = (name, dataloader_lengths[name], global_scene_pointclouds[name], VOXEL_SIZE)
             args_list.append(args)
 
-        with multiprocessing.Pool(processes=NUM_WORKERS) as pool:
-            pool.map(process_scene_scan_and_voxel_map, args_list)
+        # Process scene scans and voxel maps
+        for args in args_list:
+            process_scene_scan_and_voxel_map(args)
 
         # Process scene octomaps
         args_list = []
@@ -169,78 +166,38 @@ def process_row(row):
             num_readings = dl.num_readings
             point_clouds = []
             calibs_scene = []
-            for batch in dl:
+            for i in range(len(dl)):
+                batch = dl[i]
                 point_clouds.append(batch[0])
                 calibs_scene.append(batch[1])
             args = (name, poses_scene, point_clouds, calibs_scene, num_readings, OCTOMAP_RESOLUTION, 'octomap_tmp')
             args_list.append(args)
 
-        with multiprocessing.Pool(processes=NUM_WORKERS) as pool:
-            pool.map(process_scene_octomap, args_list)
+        # Process scene octomaps
+        for args in args_list:
+            process_scene_octomap(args)
 
-        # Proceed to label the maps for this scene
-        # Prepare data for labeling
-        scene_maps = static_scene_maps
-        scene_pointclouds = global_scene_pointclouds
-        scene_poses = poses
-        dataloaders = row_dls
+        # Save all necessary data for labeling
+        processed_data = {
+            'static_scene_maps': static_scene_maps,
+            'dynamic_scene_maps': dynamic_scene_maps,
+            'global_scene_pointclouds': global_scene_pointclouds,
+            'poses': poses,
+            'dataloaders': row_dls,
+        }
 
-        # Load processed voxel maps
-        scene_scans = {}
-        scene_voxel_maps = {}
-        for name in row_dls.keys():
-            checkpoint_file = f'checkpoints/scene_scans_voxel_maps/{name}_voxel_map.pkl'
-            if os.path.exists(checkpoint_file):
-                with open(checkpoint_file, 'rb') as f:
-                    data = pickle.load(f)
-                    scene_scans[name] = data['scans']
-                    scene_voxel_maps[name] = data['voxel_map']
-            else:
-                print(f"Voxel map for {name} not found. Skipping occupancy priors.")
-                scene_voxel_maps[name] = None
+        # Save the processed data to disk
+        with open(scene_data_file, 'wb') as f:
+            pickle.dump(processed_data, f)
 
-        # Load processed octomaps
-        scene_octomaps = {}
-        for name in row_dls.keys():
-            octomap_file = os.path.join('octomap_tmp', f"{name}_octomap.bt")
-            if os.path.exists(octomap_file):
-                with open(octomap_file, 'rb') as f:
-                    scene_octomaps[name] = octomap.OcTree(OCTOMAP_RESOLUTION)
-                    scene_octomaps[name].readBinary(f.read())
-            else:
-                print(f"Octomap file for scene {name} not found.")
-                scene_octomaps[name] = None
-
-        # Create the sps_labeler instance
-        sps_labeler = AutoLabeler(
-            scene_maps=scene_maps,
-            ref_map_id=ref_scene_name,
-            scene_poses=scene_poses,
-            scene_octomaps=scene_octomaps,
-            dynamic_priors=scene_voxel_maps,
-            use_octomaps=True,
-            use_combined_map=USE_COMBINED_MAP,
-            search_in_radius=SEARCH_IN_RADIUS,
-            radius=RADIUS,
-            downsample=True,
-            voxel_size=VOXEL_SIZE,
-            filter_out_of_bounds=FILTER_OUT_OF_BOUNDS
-        )
-
-        sps_labeler.label_maps()
-
-        labelled_map = sps_labeler.labeled_environment_map
-        # Save the labelled map to tmp_labelled_maps directory
-        np.save(labelled_map_file, labelled_map)
-
-        print(f"Processed and saved labelled map for {ref_scene_name}")
+        print(f"Processed and saved data for {ref_scene_name}")
         return ref_scene_name
 
     except Exception as e:
         print(f"Error processing {ref_scene_name}: {e}")
         return None  # Indicate failure
 
-# Function to process scene scans and voxel maps with checkpointing
+# Function to process scene scans and voxel maps
 def process_scene_scan_and_voxel_map(args):
     name, dataloader_length, scene_pointclouds_name, VOXEL_SIZE = args
     checkpoint_file = f'checkpoints/scene_scans_voxel_maps/{name}_voxel_map.pkl'
@@ -267,7 +224,7 @@ def process_scene_scan_and_voxel_map(args):
         print(f"Failed to process voxel map for {name}: {e}")
         return None
 
-# Worker function for processing scene octomaps with checkpointing
+# Worker function for processing scene octomaps
 def process_scene_octomap(args):
     name, poses, point_clouds, calibs, num_readings, OCTOMAP_RESOLUTION, tmp_dir = args
     octomap_file = os.path.join(tmp_dir, f"{name}_octomap.bt")
@@ -278,35 +235,33 @@ def process_scene_octomap(args):
         return name
 
     try:
-        dl = {
-            'name': name,
-            'poses': poses,
-            'point_clouds': point_clouds,
-            'num_readings': num_readings,
-            'calibs': calibs
-        }
-        octomap_result = build_octomap(dl, resolution=OCTOMAP_RESOLUTION)
-
-        # Save the octomap_result to a file
-        with open(octomap_file, 'wb') as f:
-            f.write(octomap_result.writeBinary())
+        # Build the octomap for the scene
+        tree = octomap.OcTree(OCTOMAP_RESOLUTION)
+        for idx in range(num_readings):
+            pcl = point_clouds[idx]
+            pose = poses[idx]
+            # Transform point cloud to global coordinates
+            pcl_global = (pose @ np.hstack((pcl[:, :3], np.ones((pcl.shape[0], 1)))).T).T[:, :3]
+            # Insert point cloud into octomap
+            tree.insertPointCloud(octomap.Pointcloud(pcl_global.astype(np.float32)), octomap.pose6d(0, 0, 0, 0, 0, 0))
+        # Save the octomap to a file
+        tree.writeBinary(octomap_file)
         print(f"Processed octomap for {name}")
         return name
     except Exception as e:
         print(f"Failed to process octomap for {name}: {e}")
         return None
 
-# Main processing function
 def main():
     # Collect already processed scenes
-    processed_scenes = set([fname.split('_labelled_map.npy')[0] for fname in os.listdir('tmp_labelled_maps')])
+    processed_scenes = set([fname.split('_data.pkl')[0] for fname in os.listdir('processed_scene_data')])
 
     # Prepare rows to process
     rows_to_process = [row for _, row in sps_df.iterrows() if row['scene_name'] not in processed_scenes]
 
     print(f"Total scenes to process: {len(rows_to_process)}")
 
-    # Use ProcessPoolExecutor for parallel processing
+    # Process scenes in parallel
     with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
         future_to_row = {executor.submit(process_row, row): row['scene_name'] for row in rows_to_process}
 
@@ -321,14 +276,63 @@ def main():
             except Exception as exc:
                 print(f"Exception occurred while processing {scene_name}: {exc}")
 
-    # After processing, load all labelled maps
-    labelled_map_files = [os.path.join('tmp_labelled_maps', f) for f in os.listdir('tmp_labelled_maps')]
-    complete_sps_labelled_map = np.vstack([np.load(f) for f in labelled_map_files])
+    # After processing, collect data from all scenes
+    scene_data_files = [os.path.join('processed_scene_data', f) for f in os.listdir('processed_scene_data')]
+    all_static_scene_maps = {}
+    all_scene_poses = {}
+    all_scene_octomaps = {}
+    all_scene_voxel_maps = {}
 
-    # Proceed with plotting and saving the final map
-    labeled_map = complete_sps_labelled_map
-    points = labeled_map[:, :3]
-    stable_probs = labeled_map[:, -1]
+    for data_file in scene_data_files:
+        with open(data_file, 'rb') as f:
+            processed_data = pickle.load(f)
+            scene_name = os.path.basename(data_file).split('_data.pkl')[0]
+            all_static_scene_maps.update(processed_data['static_scene_maps'])
+            all_scene_poses.update(processed_data['poses'])
+            # Load processed voxel maps
+            checkpoint_file = f'checkpoints/scene_scans_voxel_maps/{scene_name}_voxel_map.pkl'
+            if os.path.exists(checkpoint_file):
+                with open(checkpoint_file, 'rb') as vf:
+                    data = pickle.load(vf)
+                    all_scene_voxel_maps[scene_name] = data['voxel_map']
+            else:
+                print(f"Voxel map for {scene_name} not found.")
+                all_scene_voxel_maps[scene_name] = None
+            # Load processed octomaps
+            octomap_file = os.path.join('octomap_tmp', f"{scene_name}_octomap.bt")
+            if os.path.exists(octomap_file):
+                tree = octomap.OcTree(OCTOMAP_RESOLUTION)
+                tree.readBinary(octomap_file)
+                all_scene_octomaps[scene_name] = tree
+            else:
+                print(f"Octomap for {scene_name} not found.")
+                all_scene_octomaps[scene_name] = None
+
+    # Create the sps_labeler instance with all collected data
+    sps_labeler = AutoLabeler(
+        scene_maps=all_static_scene_maps,
+        ref_map_id=None,  # Specify if needed
+        scene_poses=all_scene_poses,
+        scene_octomaps=all_scene_octomaps,
+        dynamic_priors=all_scene_voxel_maps,
+        use_octomaps=True,
+        use_combined_map=USE_COMBINED_MAP,
+        search_in_radius=SEARCH_IN_RADIUS,
+        radius=RADIUS,
+        downsample=True,
+        voxel_size=VOXEL_SIZE,
+        filter_out_of_bounds=FILTER_OUT_OF_BOUNDS
+    )
+
+    # Call label_maps once with all data
+    sps_labeler.label_maps()
+
+    # After labeling, collect the labeled maps
+    labeled_maps = sps_labeler.labeled_environment_map
+
+    # Save and plot the final map
+    points = labeled_maps[:, :3]
+    stable_probs = labeled_maps[:, -1]
 
     plt.figure(figsize=(10, 10))
     plt.scatter(points[:, 0], points[:, 1], c=stable_probs, cmap='RdYlGn', s=0.05)
